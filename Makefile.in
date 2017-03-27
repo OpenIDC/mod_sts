@@ -1,0 +1,62 @@
+# Source files. mod_sts.c must be the first file.
+SRC=src/mod_sts.c \
+	src/shm.c
+
+HDRS = src/mod_sts.h
+
+# Files to include when making a .tar.gz-file for distribution
+DISTFILES=$(SRC) \
+	$(HDRS) \
+	configure \
+	configure.ac \
+	Makefile.in \
+	autogen.sh \
+	README.md \
+	AUTHORS \
+	DISCLAIMER \
+	LICENSE.txt \
+	ChangeLog
+
+all: src/mod_sts.la
+
+CFLAGS=@CURL_CFLAGS@ @XML_CFLAGS@
+LIBS=@CURL_LIBS@ @XML_LIBS@
+
+src/mod_sts.la: $(SRC) $(HDRS)
+	@APXS2@ @APXS2_OPTS@ -Wc,"-DNAMEVER=\"@NAMEVER@\" $(CFLAGS)" -Wl,"$(LIBS)" -Wc,-Wall -Wc,-g -c $(SRC)
+
+configure:	configure.ac
+	./autogen.sh
+
+@NAMEVER@.tar.gz:	 $(DISTFILES)
+	tar -c --transform="s#^#@NAMEVER@/#" -vzf $@ $(DISTFILES)
+
+test/test: test/test.c test/stub.c src/mod_sts.la
+	@APXS2@ @APXS2_OPTS@ $(CFLAGS) -Wl,"$(LIBS)" -Isrc -Wc,-Wall -Wc,-g -c -o $@ $@.c test/stub.c $(SRC:.c=.lo) @APR_LIBS@
+
+test: test/test
+	test/test
+
+.PHONY:	install
+install: src/mod_sts.la
+	@APXS2@ @APXS2_OPTS@ -i -n mod_sts src/mod_sts.la
+
+.PHONY: distfile
+distfile:	@NAMEVER@.tar.gz
+
+.PHONY:	clean
+clean:
+	rm -f src/mod_sts.la test/test
+	rm -f src/*.o test/*.o
+	rm -f src/*.lo test/*.lo
+	rm -f src/*.slo test/*.slo
+	rm -rf src/.libs test/.libs
+
+.PHONY:	distclean
+distclean:	clean
+	rm -f Makefile config.log config.status @NAMEVER@.tar.gz *~ \
+	build-stamp config.guess config.sub
+
+.PHONY: fullclean
+fullclean:	distclean
+	rm -f configure aclocal.m4
