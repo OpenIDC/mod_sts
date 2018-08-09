@@ -18,18 +18,12 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2013-2017 Ping Identity Corporation
+ * Copyright (C) 2017-2018 ZmartZone IAM
  * All rights reserved.
  *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
- *
- * DISCLAIMER OF WARRANTIES:
+ *      ZmartZone IAM
+ *      info@zmartzone.eu
+ *      http://www.zmartzone.eu
  *
  * THE SOFTWARE PROVIDED HEREUNDER IS PROVIDED ON AN "AS IS" BASIS, WITHOUT
  * ANY WARRANTIES OR REPRESENTATIONS EXPRESS, IMPLIED OR STATUTORY; INCLUDING,
@@ -92,7 +86,8 @@ static request_rec * test_setup(apr_pool_t *pool) {
 			&request->parsed_uri);
 
 	sts_module.module_index = 0;
-	sts_server_config *cfg = sts_create_server_config(request->pool, request->server);
+	sts_server_config *cfg = sts_create_server_config(request->pool,
+			request->server);
 
 	sts_dir_config *d_cfg = sts_create_dir_config(request->pool, NULL);
 	d_cfg->enabled = 1;
@@ -101,8 +96,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 			sizeof(ap_conf_vector_t *) * 1);
 	request->per_dir_config = apr_pcalloc(request->pool,
 			sizeof(ap_conf_vector_t *) * 1);
-	ap_set_module_config(request->server->module_config, &sts_module,
-			cfg);
+	ap_set_module_config(request->server->module_config, &sts_module, cfg);
 	ap_set_module_config(request->per_dir_config, &sts_module, d_cfg);
 
 	return request;
@@ -128,7 +122,8 @@ int main(int argc, char **argv, char **env) {
 	char *token = argv[1];
 	char *response = NULL;
 
-	apr_byte_t result = sts_util_http_token_exchange(r, token, NULL, 0, &response);
+	apr_byte_t result = sts_util_http_token_exchange(r, token, NULL, 0,
+			&response);
 	if (result == TRUE) {
 		printf("Success: %s\n", response);
 	} else {

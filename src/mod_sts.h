@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017 ZmartZone IAM
+ * Copyright (C) 2017-2018 ZmartZone IAM
  * All rights reserved.
  *
  *      ZmartZone IAM
@@ -77,9 +77,10 @@ APLOG_USE_MODULE(sts);
 #define sts_serror(s, fmt, ...) sts_slog(s, APLOG_ERR, fmt, ##__VA_ARGS__)
 
 typedef struct {
-	char *sts_url;
-	char *applies_to;
-	char *token_type;
+	int mode;
+	char *wstrust_sts_url;
+	char *wstrust_applies_to;
+	char *wstrust_token_type;
 	void *cache_cfg;
 	int cache_shm_size_max;
 	int cache_shm_entry_size_max;
@@ -94,12 +95,15 @@ typedef struct {
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr);
 void *sts_create_dir_config(apr_pool_t *pool, char *path);
 
-apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token, const char *basic_auth, int ssl_validate_server, char **response);
+apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
+		const char *basic_auth, int ssl_validate_server, char **response);
 
 int sts_cache_shm_post_config(server_rec *s);
 int sts_cache_shm_child_init(apr_pool_t *p, server_rec *s);
-apr_byte_t sts_cache_shm_get(request_rec *r, const char *section, const char *key, char **value);
-apr_byte_t sts_cache_shm_set(request_rec *r, const char *section, const char *key, const char *value, apr_time_t expiry);
+apr_byte_t sts_cache_shm_get(request_rec *r, const char *section,
+		const char *key, char **value);
+apr_byte_t sts_cache_shm_set(request_rec *r, const char *section,
+		const char *key, const char *value, apr_time_t expiry);
 int sts_cache_shm_destroy(server_rec *s);
 
 #endif /* MOD_STS_H_ */

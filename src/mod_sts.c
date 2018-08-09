@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017 ZmartZone IAM
+ * Copyright (C) 2017-2018 ZmartZone IAM
  * All rights reserved.
  *
  *      ZmartZone IAM
@@ -61,26 +61,32 @@
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 
-//module AP_MODULE_DECLARE_DATA sts_module;
+module AP_MODULE_DECLARE_DATA sts_module;
 
 #define STS_CONFIG_POS_INT_UNSET -1
 #define STS_CONFIG_DEFAULT_ENABLED 1
 
-#define STS_CONFIG_DEFAULT_STS_URL      "https://localhost:9031/pf/sts.wst"
-#define STS_CONFIG_DEFAULT_APPLIES_TO   "localhost:default:entityId"
-#define STS_CONFIG_DEFAULT_TOKEN_TYPE   "urn:bogus:token"
-//#define STS_CONFIG_DEFAULT_TOKEN_TYPE "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0"
-#define STS_CONFIG_DEFAULT_COOKIE_NAME  "sts_cookie"
+#define STS_CONFIG_DEFAULT_WSTRUST_STS_URL      "https://localhost:9031/pf/sts.wst"
+#define STS_CONFIG_DEFAULT_WSTRUST_APPLIES_TO   "localhost:default:entityId"
+#define STS_CONFIG_DEFAULT_WSTRUST_TOKEN_TYPE   "urn:bogus:token"
+//#define STS_CONFIG_DEFAULT_WSTRUST_TOKEN_TYPE "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0"
+#define STS_CONFIG_DEFAULT_COOKIE_NAME          "sts_cookie"
 
-#define STS_CONFIG_DEFAULT_VALUE_TYPE   "urn:pingidentity.com:oauth2:grant_type:validate_bearer"
-#define STS_CONFIG_DEFAULT_ACTION       "http://docs.oasis-open.org/ws-sx/ws-trust/200512/RST/Issue"
-#define STS_CONFIG_DEFAULT_REQUEST_TYPE "http://docs.oasis-open.org/ws-sx/ws-trust/200512/Issue"
-#define STS_CONFIG_DEFAULT_KEY_TYPE     "http://docs.oasis-open.org/ws-sx/ws-trust/200512/SymmetricKey"
+#define STS_CONFIG_DEFAULT_VALUE_TYPE           "urn:pingidentity.com:oauth2:grant_type:validate_bearer"
+#define STS_CONFIG_DEFAULT_ACTION               "http://docs.oasis-open.org/ws-sx/ws-trust/200512/RST/Issue"
+#define STS_CONFIG_DEFAULT_REQUEST_TYPE         "http://docs.oasis-open.org/ws-sx/ws-trust/200512/Issue"
+#define STS_CONFIG_DEFAULT_KEY_TYPE             "http://docs.oasis-open.org/ws-sx/ws-trust/200512/SymmetricKey"
 
 #define STS_CONFIG_DEFAULT_CACHE_SHM_SIZE 2048
 #define STS_CONFIG_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 4096 + 512 + 17
 
 #define STS_CONFIG_DEFAULT_CACHE_EXPIRES_IN 300
+
+#define STS_CONFIG_MODE_WSTRUST        0
+#define STS_CONFIG_MODE_ROPC           1
+#define STS_CONFIG_MODE_TOKEN_EXCHANGE 2
+
+#define STS_CONFIG_DEFAULT_STS_MODE STS_CONFIG_MODE_WSTRUST
 
 static apr_status_t sts_cleanup_handler(void *data) {
 	server_rec *s = (server_rec *) data;
@@ -129,28 +135,28 @@ static const char *sts_set_string_slot(cmd_parms *cmd, void *struct_ptr,
 	return ap_set_string_slot(cmd, cfg, arg);
 }
 
-static const char * sts_get_sts_url(request_rec *r) {
+static const char * sts_get_wstrust_sts_url(request_rec *r) {
 	sts_server_config *c = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (c->sts_url == NULL)
-		return STS_CONFIG_DEFAULT_STS_URL;
-	return c->sts_url;
+	if (c->wstrust_sts_url == NULL)
+		return STS_CONFIG_DEFAULT_WSTRUST_STS_URL;
+	return c->wstrust_sts_url;
 }
 
-static const char * sts_get_applies_to(request_rec *r) {
+static const char * sts_get_wstrust_applies_to(request_rec *r) {
 	sts_server_config *c = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (c->applies_to == NULL)
-		return STS_CONFIG_DEFAULT_APPLIES_TO;
-	return c->applies_to;
+	if (c->wstrust_applies_to == NULL)
+		return STS_CONFIG_DEFAULT_WSTRUST_APPLIES_TO;
+	return c->wstrust_applies_to;
 }
 
-static const char * sts_get_token_type(request_rec *r) {
+static const char * sts_get_wstrust_token_type(request_rec *r) {
 	sts_server_config *c = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (c->token_type == NULL)
-		return STS_CONFIG_DEFAULT_TOKEN_TYPE;
-	return c->token_type;
+	if (c->wstrust_token_type == NULL)
+		return STS_CONFIG_DEFAULT_WSTRUST_TOKEN_TYPE;
+	return c->wstrust_token_type;
 }
 
 static const char *sts_set_enabled(cmd_parms *cmd, void *m, const char *arg) {
@@ -184,6 +190,26 @@ static char * sts_get_cookie_name(request_rec *r) {
 	if (dir_cfg->cookie_name == NULL)
 		return STS_CONFIG_DEFAULT_COOKIE_NAME;
 	return dir_cfg->cookie_name;
+}
+
+static const char *sts_set_mode(cmd_parms *cmd, void *m, const char *arg) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			cmd->server->module_config, &sts_module);
+	if (strcmp(arg, "wstrust") == 0)
+		cfg->mode = STS_CONFIG_MODE_WSTRUST;
+	if (strcmp(arg, "ropc") == 0)
+		cfg->mode = STS_CONFIG_MODE_ROPC;
+	if (strcmp(arg, "tokenexchange") == 0)
+		cfg->mode = STS_CONFIG_MODE_TOKEN_EXCHANGE;
+	return "Invalid value: must be \"wstrust\", \"ropc\" or \"tokenexchange\"";
+}
+
+static int sts_get_mode(request_rec *r) {
+	sts_server_config *c = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (c->mode == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_STS_MODE;
+	return c->mode;
 }
 
 static char *sts_get_access_token(request_rec *r) {
@@ -556,7 +582,7 @@ const char *xpath_expr_template = "/s:Envelope"
 		"/wst:RequestedSecurityToken"
 		"/wsse:BinarySecurityToken[@ValueType='%s']";
 
-apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
+static apr_byte_t sts_util_http_wstrust(request_rec *r, const char *token,
 		const char *basic_auth, int ssl_validate_server, char **rtoken) {
 
 	char *response = NULL;
@@ -586,14 +612,15 @@ apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
 
 	char *data = apr_psprintf(r->pool, ws_trust_soap_call_template, id1,
 			created, expires, id2, STS_CONFIG_DEFAULT_VALUE_TYPE, b64,
-			sts_get_sts_url(r), STS_CONFIG_DEFAULT_ACTION,
-			sts_get_token_type(r),
-			STS_CONFIG_DEFAULT_REQUEST_TYPE, sts_get_applies_to(r),
+			sts_get_wstrust_sts_url(r), STS_CONFIG_DEFAULT_ACTION,
+			sts_get_wstrust_token_type(r),
+			STS_CONFIG_DEFAULT_REQUEST_TYPE, sts_get_wstrust_applies_to(r),
 			STS_CONFIG_DEFAULT_KEY_TYPE);
 
-	if (sts_util_http_call(r, sts_get_sts_url(r), data,
+	if (sts_util_http_call(r, sts_get_wstrust_sts_url(r), data,
 			"application/soap+xml; charset=utf-8", basic_auth,
-			sts_get_sts_url(r), ssl_validate_server, &response, timeout, NULL,
+			sts_get_wstrust_sts_url(r), ssl_validate_server, &response, timeout,
+			NULL,
 			NULL, NULL) == FALSE) {
 		sts_error(r, "sts_util_http_call failed!");
 		return FALSE;
@@ -602,7 +629,7 @@ apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
 	xmlInitParser();
 
 	const xmlChar *xpath_expr = (const xmlChar *) apr_psprintf(r->pool,
-			xpath_expr_template, sts_get_token_type(r));
+			xpath_expr_template, sts_get_wstrust_token_type(r));
 
 	if (sts_execute_xpath_expression(r, response, xpath_expr, rtoken) < 0) {
 		sts_error(r, "sts_execute_xpath_expression failed!");
@@ -616,11 +643,26 @@ apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
 	return TRUE;
 }
 
+apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
+		const char *basic_auth, int ssl_validate_server, char **rtoken) {
+	int mode = sts_get_mode(r);
+	if (mode == STS_CONFIG_MODE_WSTRUST)
+		return sts_util_http_wstrust(r, token, basic_auth, ssl_validate_server,
+				rtoken);
+	if (mode == STS_CONFIG_MODE_ROPC)
+		return FALSE;
+	if (mode == STS_CONFIG_MODE_TOKEN_EXCHANGE)
+		return FALSE;
+	sts_error(r, "unknown STS mode %d", mode);
+	return FALSE;
+}
+
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	sts_server_config *c = apr_pcalloc(pool, sizeof(sts_server_config));
-	c->sts_url = NULL;
-	c->applies_to = NULL;
-	c->token_type = NULL;
+	c->mode = STS_CONFIG_POS_INT_UNSET;
+	c->wstrust_sts_url = NULL;
+	c->wstrust_applies_to = NULL;
+	c->wstrust_token_type = NULL;
 	c->cache_cfg = NULL;
 	//c->cache_shm_size_max = STS_CONFIG_POS_INT_UNSET;
 	//c->cache_shm_entry_size_max = STS_CONFIG_POS_INT_UNSET;
@@ -633,11 +675,16 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	sts_server_config *c = apr_pcalloc(pool, sizeof(sts_server_config));
 	sts_server_config *base = BASE;
 	sts_server_config *add = ADD;
-	c->sts_url = add->sts_url != NULL ? add->sts_url : base->sts_url;
-	c->applies_to =
-			add->applies_to != NULL ? add->applies_to : base->applies_to;
-	c->token_type =
-			add->token_type != NULL ? add->token_type : base->token_type;
+	c->mode = add->mode != STS_CONFIG_POS_INT_UNSET ? add->mode : base->mode;
+	c->wstrust_sts_url =
+			add->wstrust_sts_url != NULL ?
+					add->wstrust_sts_url : base->wstrust_sts_url;
+	c->wstrust_applies_to =
+			add->wstrust_applies_to != NULL ?
+					add->wstrust_applies_to : base->wstrust_applies_to;
+	c->wstrust_token_type =
+			add->wstrust_token_type != NULL ?
+					add->wstrust_token_type : base->wstrust_token_type;
 	c->cache_cfg = add->cache_cfg != NULL ? add->cache_cfg : base->cache_cfg;
 	//c->cache_shm_size_max = add->cache_shm_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_size_max : base->cache_shm_size_max;
 	//c->cache_shm_entry_size_max = add->cache_shm_entry_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_entry_size_max : base->cache_shm_entry_size_max;
@@ -675,54 +722,46 @@ static void sts_register_hooks(apr_pool_t *p) {
 	ap_hook_fixups(sts_fixup_handler, aszPre, NULL, APR_HOOK_MIDDLE);
 }
 
-static const command_rec sts_cmds[] = {
+static const command_rec sts_cmds[] =
+{
 		AP_INIT_TAKE1(
 				"STSEnabled",
 				sts_set_enabled,
 				NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Enable or disable mod_sts."),
-		AP_INIT_TAKE1(
-				"STSUrl",
-				sts_set_string_slot,
-				(void*)APR_OFFSETOF(sts_server_config, sts_url),
-				RSRC_CONF,
-				"Set the STS endpoint."),
-		AP_INIT_TAKE1(
-				"STSAppliesTo",
-				sts_set_string_slot,
-				(void*)APR_OFFSETOF(sts_server_config, applies_to),
-				RSRC_CONF,
-				"Set the AppliesTo value."),
-		AP_INIT_TAKE1(
-				"STSTokenType",
-				sts_set_string_slot,
-				(void*)APR_OFFSETOF(sts_server_config, token_type),
-				RSRC_CONF,
-				"Set the Token Type."),
-		AP_INIT_TAKE1(
-				"STSCacheExpiresIn",
-				ap_set_int_slot,
-				(void*)APR_OFFSETOF(sts_dir_config, cache_expires_in),
-				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Set the cache expiry for access tokens in seconds."),
-		AP_INIT_TAKE1(
-				"STSCookieName",
-				ap_set_string_slot,
-				(void*)APR_OFFSETOF(sts_dir_config, cookie_name),
-				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Set the cookie name in which the returned token is passed to the backend."),
-		{ NULL }
-};
-
+				AP_INIT_TAKE1(
+						"STSMode",
+						sts_set_mode,
+						NULL,
+						RSRC_CONF,
+						"Set STS mode to \"wstrust\", \"ropc\" or \"tokenexchange\"."),
+						AP_INIT_TAKE1(
+								"STSWSTrustUrl",
+								sts_set_string_slot,
+								(void*)APR_OFFSETOF(sts_server_config, wstrust_sts_url),
+								RSRC_CONF,
+								"Set the STS endpoint."),
+								AP_INIT_TAKE1("STSWSTrustAppliesTo",
+										sts_set_string_slot,
+										(void*)APR_OFFSETOF(sts_server_config, wstrust_applies_to),
+										RSRC_CONF, "Set the AppliesTo value."),
+										AP_INIT_TAKE1("STSWSTrustTokenType",
+												sts_set_string_slot,
+												(void*)APR_OFFSETOF(sts_server_config, wstrust_token_type),
+												RSRC_CONF, "Set the Token Type."),
+												AP_INIT_TAKE1("STSCacheExpiresIn", ap_set_int_slot,
+														(void*)APR_OFFSETOF(sts_dir_config, cache_expires_in),
+														RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+														"Set the cache expiry for access tokens in seconds."),
+														AP_INIT_TAKE1("STSCookieName", ap_set_string_slot,
+																(void*)APR_OFFSETOF(sts_dir_config, cookie_name),
+																RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+																"Set the cookie name in which the returned token is passed to the backend."),
+																{ NULL } };
 
 module AP_MODULE_DECLARE_DATA sts_module = {
-		STANDARD20_MODULE_STUFF,
-		sts_create_dir_config,
-		sts_merge_dir_config,
-		sts_create_server_config,
-		sts_merge_server_config,
-		sts_cmds,
-		sts_register_hooks
-};
+		STANDARD20_MODULE_STUFF, sts_create_dir_config, sts_merge_dir_config,
+		sts_create_server_config, sts_merge_server_config, sts_cmds,
+		sts_register_hooks };
 
