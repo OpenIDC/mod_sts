@@ -78,9 +78,13 @@ APLOG_USE_MODULE(sts);
 
 typedef struct {
 	int mode;
+
 	char *wstrust_sts_url;
 	char *wstrust_applies_to;
 	char *wstrust_token_type;
+
+	char *ropc_token_endpoint;
+
 	void *cache_cfg;
 	int cache_shm_size_max;
 	int cache_shm_entry_size_max;
@@ -90,6 +94,7 @@ typedef struct {
 	int enabled;
 	int cache_expires_in;
 	char *cookie_name;
+	int accept_token_in;
 } sts_dir_config;
 
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr);

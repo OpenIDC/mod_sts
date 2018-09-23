@@ -192,7 +192,7 @@ typedef struct sts_cache_cfg_shm_t {
 } sts_cache_cfg_shm_t;
 
 /* size of key in cached key/value pairs */
-#define STS_CACHE_SHM_KEY_MAX 512
+#define STS_CACHE_SHM_KEY_MAX 1024
 
 /* represents one (fixed size) cache entry, cq. name/value string pair */
 typedef struct sts_cache_shm_entry_t {
@@ -356,7 +356,7 @@ apr_byte_t sts_cache_shm_set(request_rec *r, const char *section,
 	const char *section_key = sts_cache_shm_get_key(r->pool, section, key);
 
 	/* check that the passed in key is valid */
-	if (strlen(section_key) > STS_CACHE_SHM_KEY_MAX) {
+	if (strlen(section_key) >= STS_CACHE_SHM_KEY_MAX) {
 		sts_error(r, "could not store value since key size is too large (%s)",
 				section_key);
 		return FALSE;
