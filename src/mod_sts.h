@@ -84,6 +84,8 @@ typedef struct {
 	char *wstrust_token_type;
 
 	char *ropc_token_endpoint;
+	char *ropc_client_id;
+	char *ropc_username;
 
 	void *cache_cfg;
 	int cache_shm_size_max;

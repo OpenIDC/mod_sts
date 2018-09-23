@@ -65,8 +65,8 @@
 
 module AP_MODULE_DECLARE_DATA sts_module;
 
-#define STS_CONFIG_POS_INT_UNSET -1
-#define STS_CONFIG_DEFAULT_ENABLED 1
+#define STS_CONFIG_POS_INT_UNSET                -1
+#define STS_CONFIG_DEFAULT_ENABLED              1
 
 #define STS_CONFIG_DEFAULT_WSTRUST_STS_URL      "https://localhost:9031/pf/sts.wst"
 #define STS_CONFIG_DEFAULT_WSTRUST_APPLIES_TO   "localhost:default:entityId"
@@ -79,19 +79,21 @@ module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_CONFIG_DEFAULT_WSTRUST_KEY_TYPE     "http://docs.oasis-open.org/ws-sx/ws-trust/200512/SymmetricKey"
 
 #define STS_CONFIG_DEFAULT_ROPC_TOKEN_ENDPOINT  "https://localhost:9031/as/token.oauth2"
+#define STS_CONFIG_DEFAULT_ROPC_CLIENT_ID       "mod_sts"
+#define STS_CONFIG_DEFAULT_ROPC_USERNAME        "dummy"
 
-#define STS_CONFIG_DEFAULT_CACHE_SHM_SIZE 2048
+#define STS_CONFIG_DEFAULT_CACHE_SHM_SIZE       2048
 #define STS_CONFIG_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 4096 + 512 + 17
 
-#define STS_CONFIG_DEFAULT_CACHE_EXPIRES_IN 300
+#define STS_CONFIG_DEFAULT_CACHE_EXPIRES_IN     300
 
 #define STS_CONFIG_DEFAULT_COOKIE_NAME          "sts_cookie"
 
-#define STS_CONFIG_MODE_WSTRUST        0
-#define STS_CONFIG_MODE_ROPC           1
-#define STS_CONFIG_MODE_TOKEN_EXCHANGE 2
+#define STS_CONFIG_MODE_WSTRUST                 0
+#define STS_CONFIG_MODE_ROPC                    1
+#define STS_CONFIG_MODE_TOKEN_EXCHANGE          2
 
-#define STS_CONFIG_DEFAULT_STS_MODE STS_CONFIG_MODE_WSTRUST
+#define STS_CONFIG_DEFAULT_STS_MODE             STS_CONFIG_MODE_WSTRUST
 
 #define STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT  1
 #define STS_CONFIG_ACCEPT_TOKEN_IN_HEADER       2
@@ -100,7 +102,7 @@ module AP_MODULE_DECLARE_DATA sts_module;
 
 #define STS_CONFIG_DEFAULT_ACCEPT_TOKEN_IN      (STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT | STS_CONFIG_ACCEPT_TOKEN_IN_HEADER)
 
-#define STS_CACHE_SECTION     "sts"
+#define STS_CACHE_SECTION                       "sts"
 
 static apr_status_t sts_cleanup_handler(void *data) {
 	server_rec *s = (server_rec *) data;
@@ -179,6 +181,22 @@ static const char * sts_get_ropc_token_endpoint(request_rec *r) {
 	if (c->ropc_token_endpoint == NULL)
 		return STS_CONFIG_DEFAULT_ROPC_TOKEN_ENDPOINT;
 	return c->ropc_token_endpoint;
+}
+
+static const char * sts_get_ropc_client_id(request_rec *r) {
+	sts_server_config *c = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (c->ropc_client_id == NULL)
+		return STS_CONFIG_DEFAULT_ROPC_CLIENT_ID;
+	return c->ropc_client_id;
+}
+
+static const char * sts_get_ropc_username(request_rec *r) {
+	sts_server_config *c = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (c->ropc_username == NULL)
+		return STS_CONFIG_DEFAULT_ROPC_USERNAME;
+	return c->ropc_username;
 }
 
 static const char *sts_set_enabled(cmd_parms *cmd, void *m, const char *arg) {
@@ -322,11 +340,13 @@ apr_byte_t sts_util_read_form_encoded_params(request_rec *r, apr_table_t *table,
 	return TRUE;
 }
 
+#define STS_HEADER_COOKIE "Cookie"
+
 char *sts_util_get_cookie(request_rec *r, const char *cookieName) {
 	char *cookie, *tokenizerCtx, *rv = NULL;
 
 	char *cookies = apr_pstrdup(r->pool,
-			apr_table_get(r->headers_in, "Cookie"));
+			apr_table_get(r->headers_in, STS_HEADER_COOKIE));
 
 	if (cookies != NULL) {
 
@@ -939,31 +959,38 @@ apr_byte_t sts_json_object_get_string(apr_pool_t *pool, json_t *json,
 	return TRUE;
 }
 
+#define STS_ROPC_GRANT_TYPE_NAME  "grant_type"
+#define STS_ROPC_GRANT_TYPE_VALUE "password"
+#define STS_ROPC_CLIENT_ID        "client_id"
+#define STS_ROPC_USERNAME         "username"
+#define STS_ROPC_PASSWORD         "password"
+#define STS_ROPC_ACCESS_TOKEN     "access_token"
+#define STS_ROPC_CONTENT_TYPE     "application/x-www-form-urlencoded"
+
 static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
 		const char *basic_auth, int ssl_validate_server, char **rtoken) {
 
 	char *response = NULL;
 	int timeout = 20;
 
-	const char *client_id = "ro_client";
-	const char *username = "dummy";
-	// const char *scope = "openid";
-
-	// TBD
-	username = "joe";
-	token = "2Federate";
+	const char *client_id = sts_get_ropc_client_id(r);
+	const char *username = sts_get_ropc_username(r);
 
 	sts_debug(r, "enter");
 
-	char *data = apr_psprintf(r->pool, "grant_type=password");
-	data = apr_psprintf(r->pool, "%s&client_id=%s", data, client_id);
-	data = apr_psprintf(r->pool, "%s&username=%s", data, username);
-	data = apr_psprintf(r->pool, "%s&password=%s", data, token);
-	//data = apr_psprintf(r->pool, "%s&scope=%s", data, scope);
+	char *data = apr_psprintf(r->pool, "%s=%s", STS_ROPC_GRANT_TYPE_NAME,
+			STS_ROPC_GRANT_TYPE_VALUE);
+	if (client_id != NULL)
+		data = apr_psprintf(r->pool, "%s&%s=%s", data, STS_ROPC_CLIENT_ID,
+				client_id);
+	if (username != NULL)
+		data = apr_psprintf(r->pool, "%s&%s=%s", data, STS_ROPC_USERNAME,
+				username);
+	data = apr_psprintf(r->pool, "%s&%s=%s", data, STS_ROPC_PASSWORD, token);
 
 	if (sts_util_http_call(r, sts_get_ropc_token_endpoint(r), data,
-			"application/x-www-form-urlencoded", basic_auth,
-			sts_get_wstrust_sts_url(r), ssl_validate_server, &response, timeout,
+			STS_ROPC_CONTENT_TYPE, basic_auth, sts_get_wstrust_sts_url(r),
+			ssl_validate_server, &response, timeout,
 			NULL,
 			NULL, NULL) == FALSE) {
 		sts_error(r, "sts_util_http_call failed!");
@@ -974,7 +1001,8 @@ static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
 	if (sts_util_decode_json_and_check_error(r, response, &result) == FALSE)
 		return FALSE;
 
-	apr_byte_t rv = sts_json_object_get_string(r->pool, result, "access_token", rtoken,
+	apr_byte_t rv = sts_json_object_get_string(r->pool, result,
+			STS_ROPC_ACCESS_TOKEN, rtoken,
 			NULL);
 	/*
 	 char **token_type = NULL;
@@ -996,6 +1024,7 @@ static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
 	 refresh_token,
 	 NULL);
 	 */
+
 	json_decref(result);
 
 	return rv;
@@ -1023,6 +1052,11 @@ void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->wstrust_applies_to = NULL;
 	c->wstrust_token_type = NULL;
 	c->cache_cfg = NULL;
+
+	c->ropc_token_endpoint = NULL;
+	c->ropc_client_id = NULL;
+	c->ropc_username = NULL;
+
 	//c->cache_shm_size_max = STS_CONFIG_POS_INT_UNSET;
 	//c->cache_shm_entry_size_max = STS_CONFIG_POS_INT_UNSET;
 	c->cache_shm_size_max = STS_CONFIG_DEFAULT_CACHE_SHM_SIZE;
@@ -1044,6 +1078,17 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->wstrust_token_type =
 			add->wstrust_token_type != NULL ?
 					add->wstrust_token_type : base->wstrust_token_type;
+
+	c->ropc_token_endpoint =
+			add->ropc_token_endpoint != NULL ?
+					add->ropc_token_endpoint : base->ropc_token_endpoint;
+	c->ropc_client_id =
+			add->ropc_client_id != NULL ?
+					add->ropc_client_id : base->ropc_client_id;
+	c->ropc_username =
+			add->ropc_username != NULL ?
+					add->ropc_username : base->ropc_username;
+
 	c->cache_cfg = add->cache_cfg != NULL ? add->cache_cfg : base->cache_cfg;
 	//c->cache_shm_size_max = add->cache_shm_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_size_max : base->cache_shm_size_max;
 	//c->cache_shm_entry_size_max = add->cache_shm_entry_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_entry_size_max : base->cache_shm_entry_size_max;
@@ -1085,8 +1130,8 @@ static void sts_register_hooks(apr_pool_t *p) {
 	ap_hook_fixups(sts_fixup_handler, aszPre, NULL, APR_HOOK_MIDDLE);
 }
 
-static const command_rec sts_cmds[] =
-{
+static const command_rec sts_cmds[] = {
+
 		AP_INIT_TAKE1(
 				"STSEnabled",
 				sts_set_enabled,
@@ -1126,6 +1171,18 @@ static const command_rec sts_cmds[] =
 				(void*)APR_OFFSETOF(sts_server_config, ropc_token_endpoint),
 				RSRC_CONF,
 				"Set the OAuth 2.0 ROPC Token Endpoint."),
+		AP_INIT_TAKE1(
+				"STSROPCClientID",
+				sts_set_string_slot,
+				(void*)APR_OFFSETOF(sts_server_config, ropc_client_id),
+				RSRC_CONF,
+				"Set the Client ID for the OAuth 2.0 ROPC token request."),
+		AP_INIT_TAKE1(
+				"STSROPCUsername",
+				sts_set_string_slot,
+				(void*)APR_OFFSETOF(sts_server_config, ropc_username),
+				RSRC_CONF,
+				"Set the Username to be used in the OAuth 2.0 ROPC token request."),
 
 		AP_INIT_TAKE1(
 				"STSCacheExpiresIn",
@@ -1145,9 +1202,11 @@ static const command_rec sts_cmds[] =
 				sts_set_accept_token_in,
 				NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Configure how the access token may be presented; must be one of \"environment\", \"header\", \"query\" or \"cookie\"."),
+				"Configure how the access token may be presented; must be one or more of \"environment\", \"header\", \"query\" or \"cookie\"."),
 
-		{ NULL } };
+		{ NULL }
+
+};
 
 module AP_MODULE_DECLARE_DATA sts_module = {
 		STANDARD20_MODULE_STUFF,
