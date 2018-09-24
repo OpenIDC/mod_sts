@@ -82,6 +82,7 @@ typedef struct {
 	char *wstrust_sts_url;
 	char *wstrust_applies_to;
 	char *wstrust_token_type;
+	char *wstrust_value_type;
 
 	char *ropc_token_endpoint;
 	char *ropc_client_id;

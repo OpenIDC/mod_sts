@@ -80,7 +80,7 @@ module AP_MODULE_DECLARE_DATA sts_module;
 
 #define STS_CONFIG_DEFAULT_ROPC_TOKEN_ENDPOINT  "https://localhost:9031/as/token.oauth2"
 #define STS_CONFIG_DEFAULT_ROPC_CLIENT_ID       "mod_sts"
-#define STS_CONFIG_DEFAULT_ROPC_USERNAME        "dummy"
+#define STS_CONFIG_DEFAULT_ROPC_USERNAME        NULL
 
 #define STS_CONFIG_DEFAULT_CACHE_SHM_SIZE       2048
 #define STS_CONFIG_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 4096 + 512 + 17
@@ -175,6 +175,14 @@ static const char * sts_get_wstrust_token_type(request_rec *r) {
 	return c->wstrust_token_type;
 }
 
+static const char * sts_get_wstrust_value_type(request_rec *r) {
+	sts_server_config *c = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (c->wstrust_value_type == NULL)
+		return STS_CONFIG_DEFAULT_WSTRUST_VALUE_TYPE;
+	return c->wstrust_value_type;
+}
+
 static const char * sts_get_ropc_token_endpoint(request_rec *r) {
 	sts_server_config *c = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
@@ -195,7 +203,7 @@ static const char * sts_get_ropc_username(request_rec *r) {
 	sts_server_config *c = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
 	if (c->ropc_username == NULL)
-		return STS_CONFIG_DEFAULT_ROPC_USERNAME;
+		return sts_get_ropc_client_id(r);
 	return c->ropc_username;
 }
 
@@ -840,7 +848,7 @@ static apr_byte_t sts_util_http_wstrust(request_rec *r, const char *token,
 	apr_strftime(expires, &size, STR_SIZE, "%Y-%m-%dT%H:%M:%SZ", &exp);
 
 	char *data = apr_psprintf(r->pool, ws_trust_soap_call_template, id1,
-			created, expires, id2, STS_CONFIG_DEFAULT_WSTRUST_VALUE_TYPE, b64,
+			created, expires, id2, sts_get_wstrust_value_type(r), b64,
 			sts_get_wstrust_sts_url(r), STS_CONFIG_DEFAULT_WSTRUST_ACTION,
 			sts_get_wstrust_token_type(r),
 			STS_CONFIG_DEFAULT_WSTRUST_REQUEST_TYPE,
@@ -1047,16 +1055,19 @@ apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
 
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	sts_server_config *c = apr_pcalloc(pool, sizeof(sts_server_config));
+
 	c->mode = STS_CONFIG_POS_INT_UNSET;
+
 	c->wstrust_sts_url = NULL;
 	c->wstrust_applies_to = NULL;
 	c->wstrust_token_type = NULL;
-	c->cache_cfg = NULL;
+	c->wstrust_value_type = NULL;
 
 	c->ropc_token_endpoint = NULL;
 	c->ropc_client_id = NULL;
 	c->ropc_username = NULL;
 
+	c->cache_cfg = NULL;
 	//c->cache_shm_size_max = STS_CONFIG_POS_INT_UNSET;
 	//c->cache_shm_entry_size_max = STS_CONFIG_POS_INT_UNSET;
 	c->cache_shm_size_max = STS_CONFIG_DEFAULT_CACHE_SHM_SIZE;
@@ -1068,7 +1079,9 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	sts_server_config *c = apr_pcalloc(pool, sizeof(sts_server_config));
 	sts_server_config *base = BASE;
 	sts_server_config *add = ADD;
+
 	c->mode = add->mode != STS_CONFIG_POS_INT_UNSET ? add->mode : base->mode;
+
 	c->wstrust_sts_url =
 			add->wstrust_sts_url != NULL ?
 					add->wstrust_sts_url : base->wstrust_sts_url;
@@ -1078,6 +1091,9 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->wstrust_token_type =
 			add->wstrust_token_type != NULL ?
 					add->wstrust_token_type : base->wstrust_token_type;
+	c->wstrust_value_type =
+			add->wstrust_value_type != NULL ?
+					add->wstrust_value_type : base->wstrust_value_type;
 
 	c->ropc_token_endpoint =
 			add->ropc_token_endpoint != NULL ?
@@ -1151,19 +1167,25 @@ static const command_rec sts_cmds[] = {
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_sts_url),
 				RSRC_CONF,
-				"Set the STS endpoint."),
+				"Set the WS-Trust STS endpoint."),
 		AP_INIT_TAKE1(
 				"STSWSTrustAppliesTo",
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_applies_to),
 				RSRC_CONF,
-				"Set the AppliesTo value."),
+				"Set the WS-Trust AppliesTo value."),
 		AP_INIT_TAKE1(
 				"STSWSTrustTokenType",
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_token_type),
 				RSRC_CONF,
-				"Set the Token Type."),
+				"Set the WS-Trust Token Type."),
+		AP_INIT_TAKE1(
+				"STSWSTrustValueType",
+				sts_set_string_slot,
+				(void*)APR_OFFSETOF(sts_server_config, wstrust_value_type),
+				RSRC_CONF,
+				"Set the WS-Trust Value Type."),
 
 		AP_INIT_TAKE1(
 				"STSROPCTokenEndpoint",
@@ -1182,7 +1204,7 @@ static const command_rec sts_cmds[] = {
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, ropc_username),
 				RSRC_CONF,
-				"Set the Username to be used in the OAuth 2.0 ROPC token request."),
+				"Set the Username to be used in the OAuth 2.0 ROPC token request; if left empty the client_id will be passed in the username."),
 
 		AP_INIT_TAKE1(
 				"STSCacheExpiresIn",
