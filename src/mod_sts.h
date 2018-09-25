@@ -47,9 +47,11 @@
 #define MOD_STS_H_
 
 #include <http_log.h>
-#include <http_config.h>
 
 #include <apr_strings.h>
+#include <apr_hash.h>
+
+#include <jansson.h>
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(sts);
@@ -75,6 +77,16 @@ APLOG_USE_MODULE(sts);
 #define sts_sinfo(r, fmt, ...)  sts_slog(r, APLOG_INFO, fmt, ##__VA_ARGS__)
 #define sts_swarn(s, fmt, ...) sts_slog(s, APLOG_WARNING, fmt, ##__VA_ARGS__)
 #define sts_serror(s, fmt, ...) sts_slog(s, APLOG_ERR, fmt, ##__VA_ARGS__)
+
+#define STS_HEADER_COOKIE                       "Cookie"
+#define STS_HEADER_SOAP_ACTION                  "soapAction"
+#define STS_HEADER_CONTENT_TYPE                 "Content-Type"
+#define STS_HEADER_HOST                         "Host"
+#define STS_HEADER_X_FORWARDED_PROTO            "X-Forwarded-Proto"
+#define STS_HEADER_X_FORWARDED_HOST             "X-Forwarded-Host"
+#define STS_HEADER_X_FORWARDED_PORT             "X-Forwarded-Port"
+
+#define STS_CONTENT_TYPE_FORM_ENCODED           "application/x-www-form-urlencoded"
 
 typedef struct {
 	int mode;
@@ -102,6 +114,7 @@ typedef struct {
 	int cache_expires_in;
 	char *cookie_name;
 	int accept_token_in;
+	apr_hash_t *accept_token_in_options;
 	char *resource;
 } sts_dir_config;
 
@@ -118,5 +131,23 @@ apr_byte_t sts_cache_shm_get(request_rec *r, const char *section,
 apr_byte_t sts_cache_shm_set(request_rec *r, const char *section,
 		const char *key, const char *value, apr_time_t expiry);
 int sts_cache_shm_destroy(server_rec *s);
+
+apr_byte_t sts_util_read_form_encoded_params(request_rec *r, apr_table_t *table,
+		char *data);
+char *sts_util_get_cookie(request_rec *r, const char *cookieName);
+apr_byte_t sts_util_http_call(request_rec *r, const char *url, const char *data,
+		const char *content_type, const char *basic_auth,
+		const char *soap_action, int ssl_validate_server, char **response,
+		int timeout, const char *outgoing_proxy, const char *ssl_cert,
+		const char *ssl_key);
+apr_byte_t sts_util_http_post_form(request_rec *r, const char *url,
+		const apr_table_t *params, const char *basic_auth,
+		int ssl_validate_server, char **response, int timeout,
+		const char *outgoing_proxy, const char *ssl_cert, const char *ssl_key);
+char *sts_util_get_current_url(request_rec *r);
+apr_byte_t sts_util_decode_json_and_check_error(request_rec *r, const char *str,
+		json_t **json);
+apr_byte_t sts_util_json_object_get_string(apr_pool_t *pool, json_t *json,
+		const char *name, char **value, const char *default_value);
 
 #endif /* MOD_STS_H_ */

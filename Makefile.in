@@ -1,6 +1,7 @@
 # Source files. mod_sts.c must be the first file.
 SRC=src/mod_sts.c \
-	src/shm.c
+	src/shm.c \
+	src/util.c
 
 HDRS = src/mod_sts.h
 

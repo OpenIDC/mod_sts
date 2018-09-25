@@ -44,9 +44,7 @@
  **************************************************************************/
 
 // TODO: outgoing methods and options (e.g. cookie:mod_sts)
-// TODO: options on incoming method (e.g. cookie:PA.global)
 // TODO: client authentication options for all(!) STS methods
-// TODO: validate that PCV with refresh token uses username as defined by grant type
 // TODO: add cookies to backend according to STSPassCookies directive instead of overwriting?
 #include <httpd.h>
 #include <http_config.h>
@@ -59,17 +57,12 @@
 #include <apr_base64.h>
 #include <apr_lib.h>
 
-#include "mod_sts.h"
-#include "curl/curl.h"
-
 #include <libxml/tree.h>
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 
-#include "jansson.h"
-
-//module AP_MODULE_DECLARE_DATA sts_module;
+#include "mod_sts.h"
 
 #define STS_CONFIG_POS_INT_UNSET                -1
 #define STS_CONFIG_DEFAULT_ENABLED              1
@@ -115,15 +108,14 @@
 #define STS_CONFIG_DEFAULT_SSL_VALIDATION       1
 #define STS_CONFIG_DEFAULT_HTTP_TIMEOUT         20
 
-#define STS_CONTENT_TYPE_FORM_ENCODED           "application/x-www-form-urlencoded"
+module AP_MODULE_DECLARE_DATA sts_module;
 
-#define STS_HEADER_COOKIE                       "Cookie"
-#define STS_HEADER_SOAP_ACTION                  "soapAction"
-#define STS_HEADER_CONTENT_TYPE                 "Content-Type"
-#define STS_HEADER_HOST                         "Host"
-#define STS_HEADER_X_FORWARDED_PROTO            "X-Forwarded-Proto"
-#define STS_HEADER_X_FORWARDED_HOST             "X-Forwarded-Host"
-#define STS_HEADER_X_FORWARDED_PORT             "X-Forwarded-Port"
+static long STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT_INT =
+		STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT;
+static long STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_INT =
+		STS_CONFIG_ACCEPT_TOKEN_IN_QUERY;
+static long STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_INT =
+		STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE;
 
 static apr_status_t sts_cleanup_handler(void *data) {
 	server_rec *s = (server_rec *) data;
@@ -204,20 +196,53 @@ static const char *sts_set_mode(cmd_parms *cmd, void *m, const char *arg) {
 	return "Invalid value: must be \"wstrust\", \"ropc\" or \"tokenexchange\"";
 }
 
+#define STS_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT         "PA.global"
+#define STS_ACCEPT_TOKEN_IN_ENVIRONMENT_VARNAME_DEFAULT "OIDC_access_token"
+#define STS_ACCEPT_TOKEN_IN_QUERY_PARAMNAME_DEFAULT     "access_token"
+#define STS_ACCEPT_TOKEN_IN_OPTIONS_SEPARATOR           ":"
+
+static void sts_set_accept_token_in_options(cmd_parms *cmd,
+		sts_dir_config *dir_cfg, long *type, const char *option,
+		char *default_value) {
+	if (dir_cfg->accept_token_in_options == NULL)
+		dir_cfg->accept_token_in_options = apr_hash_make(cmd->pool);
+	if (option == NULL)
+		option = default_value;
+	apr_hash_set(dir_cfg->accept_token_in_options, (const void *) type,
+			sizeof(long), apr_pstrdup(cmd->pool, option));
+}
+
 static const char *sts_set_accept_token_in(cmd_parms *cmd, void *m,
 		const char *arg) {
 	sts_dir_config *dir_cfg = (sts_dir_config *) m;
 
 	int v = STS_CONFIG_POS_INT_UNSET;
 
-	if (strcmp(arg, "environment") == 0)
+	const char *method = apr_pstrdup(cmd->pool, arg);
+	char *option = strstr(method, STS_ACCEPT_TOKEN_IN_OPTIONS_SEPARATOR);
+	if (option != NULL) {
+		*option = '\0';
+		option++;
+	}
+
+	if (strcmp(method, "environment") == 0) {
 		v = STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT;
-	if (strcmp(arg, "header") == 0)
+		sts_set_accept_token_in_options(cmd, dir_cfg,
+				&STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT_INT, option,
+				STS_ACCEPT_TOKEN_IN_ENVIRONMENT_VARNAME_DEFAULT);
+	} else if (strcmp(method, "header") == 0) {
 		v = STS_CONFIG_ACCEPT_TOKEN_IN_HEADER;
-	if (strcmp(arg, "query") == 0)
+	} else if (strcmp(method, "query") == 0) {
 		v = STS_CONFIG_ACCEPT_TOKEN_IN_QUERY;
-	if (strcmp(arg, "cookie") == 0)
+		sts_set_accept_token_in_options(cmd, dir_cfg,
+				&STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_INT, option,
+				STS_ACCEPT_TOKEN_IN_QUERY_PARAMNAME_DEFAULT);
+	} else if (strcmp(method, "cookie") == 0) {
 		v = STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE;
+		sts_set_accept_token_in_options(cmd, dir_cfg,
+				&STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_INT, option,
+				STS_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT);
+	}
 
 	if (v != STS_CONFIG_POS_INT_UNSET) {
 		if (dir_cfg->accept_token_in == STS_CONFIG_POS_INT_UNSET)
@@ -358,102 +383,31 @@ static const char * sts_get_resource(request_rec *r) {
 	return dir_cfg->resource;
 }
 
-char *sts_util_unescape_string(const request_rec *r, const char *str) {
-	CURL *curl = curl_easy_init();
-	if (curl == NULL) {
-		sts_error(r, "curl_easy_init() error");
-		return NULL;
-	}
-	int counter = 0;
-	char *replaced = (char *) str;
-	while (str[counter] != '\0') {
-		if (str[counter] == '+') {
-			replaced[counter] = ' ';
-		}
-		counter++;
-	}
-	char *result = curl_easy_unescape(curl, replaced, 0, 0);
-	if (result == NULL) {
-		sts_error(r, "curl_easy_unescape() error");
-		return NULL;
-	}
-	char *rv = apr_pstrdup(r->pool, result);
-	curl_free(result);
-	curl_easy_cleanup(curl);
-	//sts_debug(r, "input=\"%s\", output=\"%s\"", str, rv);
-	return rv;
+static char *sts_get_access_token_option(request_rec *r, long *v,
+		char *default_value) {
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+	char *rv = NULL;
+	if (dir_cfg->accept_token_in_options != NULL)
+		rv = (char *) apr_hash_get(dir_cfg->accept_token_in_options,
+				(const void *) v, sizeof(long));
+	return ((rv != NULL) ? rv : default_value);
 }
-
-apr_byte_t sts_util_read_form_encoded_params(request_rec *r, apr_table_t *table,
-		char *data) {
-	const char *key, *val, *p = data;
-
-	while (p && *p && (val = ap_getword(r->pool, &p, '&'))) {
-		key = ap_getword(r->pool, &val, '=');
-		key = sts_util_unescape_string(r, key);
-		val = sts_util_unescape_string(r, val);
-		sts_debug(r, "read: %s=%s", key, val);
-		apr_table_set(table, key, val);
-	}
-
-	sts_debug(r, "parsed: %d bytes into %d elements",
-			data ? (int )strlen(data) : 0, apr_table_elts(table)->nelts);
-
-	return TRUE;
-}
-
-char *sts_util_get_cookie(request_rec *r, const char *cookieName) {
-	char *cookie, *tokenizerCtx, *rv = NULL;
-
-	char *cookies = apr_pstrdup(r->pool,
-			apr_table_get(r->headers_in, STS_HEADER_COOKIE));
-
-	if (cookies != NULL) {
-
-		/* tokenize on ; to find the cookie we want */
-		cookie = apr_strtok(cookies, ";", &tokenizerCtx);
-
-		while (cookie != NULL) {
-
-			while (*cookie == ' ')
-				cookie++;
-
-			/* see if we've found the cookie that we're looking for */
-			if ((strncmp(cookie, cookieName, strlen(cookieName)) == 0)
-					&& (cookie[strlen(cookieName)] == '=')) {
-
-				/* skip to the meat of the parameter (the value after the '=') */
-				cookie += (strlen(cookieName) + 1);
-				rv = apr_pstrdup(r->pool, cookie);
-
-				break;
-			}
-
-			/* go to the next cookie */
-			cookie = apr_strtok(NULL, ";", &tokenizerCtx);
-		}
-	}
-
-	/* log what we've found */
-	sts_debug(r, "returning \"%s\" = %s", cookieName,
-			rv ? apr_psprintf(r->pool, "\"%s\"", rv) : "<null>");
-
-	return rv;
-}
-
-#define STS_OIDC_ACCESS_TOKEN_ENV_NAME "OIDC_access_token"
 
 static char *sts_get_access_token_from_environment(request_rec *r) {
 	sts_debug(r, "enter");
 
+	char *envvar_name = sts_get_access_token_option(r,
+			&STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT_INT,
+			STS_ACCEPT_TOKEN_IN_ENVIRONMENT_VARNAME_DEFAULT);
 	char *access_token = apr_pstrdup(r->pool,
-			apr_table_get(r->subprocess_env, STS_OIDC_ACCESS_TOKEN_ENV_NAME));
+			apr_table_get(r->subprocess_env, envvar_name));
+
 	if (access_token == NULL) {
 		sts_debug(r,
 				"no access_token found in %s subprocess environment variables",
-				STS_OIDC_ACCESS_TOKEN_ENV_NAME);
+				envvar_name);
 	}
-
 	return access_token;
 }
 
@@ -480,25 +434,34 @@ static char *sts_get_access_token_from_header(request_rec *r) {
 	return access_token;
 }
 
-#define STS_ACCESS_TOKEN_QUERY_PARAM_NAME "access_token"
-
 static char *sts_get_access_token_from_query(request_rec *r) {
 	sts_debug(r, "enter");
 	char *access_token = NULL;
 
 	apr_table_t *params = apr_table_make(r->pool, 8);
 	sts_util_read_form_encoded_params(r, params, r->args);
+
+	char *query_param_name = sts_get_access_token_option(r,
+			&STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_INT,
+			STS_ACCEPT_TOKEN_IN_QUERY_PARAMNAME_DEFAULT);
 	access_token = apr_pstrdup(r->pool,
-			apr_table_get(params, STS_ACCESS_TOKEN_QUERY_PARAM_NAME));
+			apr_table_get(params, query_param_name));
+
+	if (access_token == NULL)
+		sts_debug(r, "no access token found in query parameter: %s",
+				query_param_name);
 
 	return access_token;
 }
 
-#define STS_ACCESS_TOKEN_COOKIE_NAME "PA.global"
-
 static char *sts_get_access_token_from_cookie(request_rec *r) {
 	sts_debug(r, "enter");
-	char *access_token = sts_util_get_cookie(r, STS_ACCESS_TOKEN_COOKIE_NAME);
+	char *cookie_name = sts_get_access_token_option(r,
+			&STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_INT,
+			STS_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT);
+	char *access_token = sts_util_get_cookie(r, cookie_name);
+	if (access_token == NULL)
+		sts_debug(r, "no access token found in cookie: %s", cookie_name);
 	return access_token;
 }
 
@@ -507,7 +470,6 @@ static const char *sts_get_access_token(request_rec *r) {
 	const char *access_token = NULL;
 
 	int accept_token_in = sts_get_accept_token_in(r);
-	sts_debug(r, "accept_token_in: %d", accept_token_in);
 
 	if ((access_token == NULL)
 			&& (accept_token_in & STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT))
@@ -518,8 +480,9 @@ static const char *sts_get_access_token(request_rec *r) {
 		access_token = sts_get_access_token_from_header(r);
 
 	if ((access_token == NULL)
-			&& (accept_token_in & STS_CONFIG_ACCEPT_TOKEN_IN_QUERY))
+			&& (accept_token_in & STS_CONFIG_ACCEPT_TOKEN_IN_QUERY)) {
 		access_token = sts_get_access_token_from_query(r);
+	}
 
 	if ((access_token == NULL)
 			&& (accept_token_in & STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE))
@@ -578,248 +541,6 @@ static int sts_post_read_request(request_rec *r) {
 static int sts_fixup_handler(request_rec *r) {
 	sts_debug(r, "enter");
 	return sts_handler(r);
-}
-
-typedef struct sts_curl_buffer {
-	request_rec *r;
-	char *memory;
-	size_t size;
-} sts_curl_buffer;
-
-#define STS_CURL_MAX_RESPONSE_SIZE 1024 * 1024
-
-size_t sts_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
-	size_t realsize = size * nmemb;
-	sts_curl_buffer *mem = (sts_curl_buffer *) userp;
-
-	/* check if we don't run over the maximum buffer/memory size for HTTP responses */
-	if (mem->size + realsize > STS_CURL_MAX_RESPONSE_SIZE) {
-		sts_error(mem->r,
-				"HTTP response larger than maximum allowed size: current size=%ld, additional size=%ld, max=%d",
-				mem->size, realsize, STS_CURL_MAX_RESPONSE_SIZE);
-		return 0;
-	}
-
-	/* allocate the new buffer for the current + new response bytes */
-	char *newptr = apr_palloc(mem->r->pool, mem->size + realsize + 1);
-	if (newptr == NULL) {
-		sts_error(mem->r,
-				"memory allocation for new buffer of %ld bytes failed",
-				mem->size + realsize + 1);
-		return 0;
-	}
-
-	/* copy over the data from current memory plus the cURL buffer */
-	memcpy(newptr, mem->memory, mem->size);
-	memcpy(&(newptr[mem->size]), contents, realsize);
-	mem->size += realsize;
-	mem->memory = newptr;
-	mem->memory[mem->size] = 0;
-
-	return realsize;
-}
-
-#define STS_CURL_USER_AGENT     "mod_sts"
-
-static apr_byte_t sts_util_http_call(request_rec *r, const char *url,
-		const char *data, const char *content_type, const char *basic_auth,
-		const char *soap_action, int ssl_validate_server, char **response,
-		int timeout, const char *outgoing_proxy, const char *ssl_cert,
-		const char *ssl_key) {
-	char curlError[CURL_ERROR_SIZE];
-	sts_curl_buffer curlBuffer;
-	CURL *curl;
-	struct curl_slist *h_list = NULL;
-
-	/* do some logging about the inputs */
-	sts_debug(r,
-			"url=%s, data=%s, content_type=%s, soap_action=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d",
-			url, data, content_type, basic_auth, soap_action,
-			ssl_validate_server, timeout);
-
-	curl = curl_easy_init();
-	if (curl == NULL) {
-		sts_error(r, "curl_easy_init() error");
-		return FALSE;
-	}
-
-	/* set the error buffer as empty before performing a request */
-	curlError[0] = 0;
-
-	/* some of these are not really required */
-	curl_easy_setopt(curl, CURLOPT_HEADER, 0L);
-	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
-	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlError);
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-	curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
-
-	/* set the timeout */
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
-
-	/* setup the buffer where the response will be written to */
-	curlBuffer.r = r;
-	curlBuffer.memory = NULL;
-	curlBuffer.size = 0;
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, sts_curl_write);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void * )&curlBuffer);
-
-#ifndef LIBCURL_NO_CURLPROTO
-	curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS,
-			CURLPROTO_HTTP|CURLPROTO_HTTPS);
-	curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS);
-#endif
-
-	/* set the options for validating the SSL server certificate that the remote site presents */
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,
-			(ssl_validate_server != 0 ? 1L : 0L));
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,
-			(ssl_validate_server != 0 ? 2L : 0L));
-
-#ifdef WIN32
-	DWORD buflen;
-	char *ptr = NULL;
-	char *retval = (char *) malloc(sizeof (TCHAR) * (MAX_PATH + 1));
-	retval[0] = '\0';
-	buflen = SearchPath(NULL, "curl-ca-bundle.crt", NULL, MAX_PATH+1, retval, &ptr);
-	if (buflen > 0)
-		curl_easy_setopt(curl, CURLOPT_CAINFO, retval);
-	else
-		sts_warn(r, "no curl-ca-bundle.crt file found in path");
-	free(retval);
-#endif
-
-	/* identify this HTTP client */
-	curl_easy_setopt(curl, CURLOPT_USERAGENT, STS_CURL_USER_AGENT);
-
-	/* set optional outgoing proxy for the local network */
-	if (outgoing_proxy) {
-		curl_easy_setopt(curl, CURLOPT_PROXY, outgoing_proxy);
-	}
-
-	/* see if we need to add a soap action header */
-	if (soap_action != NULL) {
-		h_list = curl_slist_append(h_list,
-				apr_psprintf(r->pool, "%s: %s", STS_HEADER_SOAP_ACTION,
-						soap_action));
-	}
-
-	/* see if we need to perform HTTP basic authentication to the remote site */
-	if (basic_auth != NULL) {
-		curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-		curl_easy_setopt(curl, CURLOPT_USERPWD, basic_auth);
-	}
-
-	if (ssl_cert != NULL)
-		curl_easy_setopt(curl, CURLOPT_SSLCERT, ssl_cert);
-	if (ssl_key != NULL)
-		curl_easy_setopt(curl, CURLOPT_SSLKEY, ssl_key);
-
-	if (data != NULL) {
-		/* set POST data */
-		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-		/* set HTTP method to POST */
-		curl_easy_setopt(curl, CURLOPT_POST, 1);
-	}
-
-	if (content_type != NULL) {
-		/* set content type */
-		h_list = curl_slist_append(h_list,
-				apr_psprintf(r->pool, "%s: %s", STS_HEADER_CONTENT_TYPE,
-						content_type));
-	}
-
-	/* see if we need to add any custom headers */
-	if (h_list != NULL)
-		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_list);
-
-	/* set the target URL */
-	curl_easy_setopt(curl, CURLOPT_URL, url);
-
-	/* call it and record the result */
-	int rv = TRUE;
-	if (curl_easy_perform(curl) != CURLE_OK) {
-		sts_error(r, "curl_easy_perform() failed on: %s (%s)", url,
-				curlError[0] ? curlError : "");
-		rv = FALSE;
-		goto out;
-	}
-
-	long response_code;
-	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-	sts_debug(r, "HTTP response code=%ld", response_code);
-
-	*response = apr_pstrndup(r->pool, curlBuffer.memory, curlBuffer.size);
-
-	/* set and log the response */
-	sts_debug(r, "response=%s", *response ? *response : "");
-
-	out:
-
-	/* cleanup and return the result */
-	if (h_list != NULL)
-		curl_slist_free_all(h_list);
-	curl_easy_cleanup(curl);
-
-	return rv;
-}
-
-static char *sts_util_escape_string(const request_rec *r, const char *str) {
-	CURL *curl = curl_easy_init();
-	if (curl == NULL) {
-		sts_error(r, "curl_easy_init() error");
-		return NULL;
-	}
-	char *result = curl_easy_escape(curl, str, 0);
-	if (result == NULL) {
-		sts_error(r, "curl_easy_escape() error");
-		return NULL;
-	}
-	char *rv = apr_pstrdup(r->pool, result);
-	curl_free(result);
-	curl_easy_cleanup(curl);
-	return rv;
-}
-
-typedef struct sts_http_encode_t {
-	request_rec *r;
-	char *encoded_params;
-} sts_http_encode_t;
-
-static int sts_util_http_add_form_url_encoded_param(void* rec, const char* key,
-		const char* value) {
-	sts_http_encode_t *ctx = (sts_http_encode_t*) rec;
-	sts_debug(ctx->r, "processing: %s=%s", key, value);
-	const char *sep = ctx->encoded_params ? "&" : "";
-	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
-			ctx->encoded_params ? ctx->encoded_params : "", sep,
-					sts_util_escape_string(ctx->r, key),
-					sts_util_escape_string(ctx->r, value));
-	return 1;
-}
-
-static char *sts_util_http_form_encoded_data(request_rec *r,
-		const apr_table_t *params) {
-	char *data = NULL;
-	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
-		sts_http_encode_t encode_data = { r, NULL };
-		apr_table_do(sts_util_http_add_form_url_encoded_param, &encode_data,
-				params,
-				NULL);
-		data = encode_data.encoded_params;
-	}
-	sts_debug(r, "data=%s", data);
-	return data;
-}
-
-apr_byte_t sts_util_http_post_form(request_rec *r, const char *url,
-		const apr_table_t *params, const char *basic_auth,
-		int ssl_validate_server, char **response, int timeout,
-		const char *outgoing_proxy, const char *ssl_cert, const char *ssl_key) {
-	char *data = sts_util_http_form_encoded_data(r, params);
-	return sts_util_http_call(r, url, data,
-			STS_CONTENT_TYPE_FORM_ENCODED, basic_auth, NULL, ssl_validate_server,
-			response, timeout, outgoing_proxy, ssl_cert, ssl_key);
 }
 
 const char *ws_trust_soap_call_template =
@@ -934,7 +655,7 @@ const char *xpath_expr_template = "/s:Envelope"
 		"/wst:RequestedSecurityToken"
 		"/wsse:BinarySecurityToken[@ValueType='%s']";
 
-static apr_byte_t sts_util_http_wstrust(request_rec *r, const char *token,
+static apr_byte_t sts_exec_wstrust(request_rec *r, const char *token,
 		const char *basic_auth, int ssl_validate_server, char **rtoken) {
 
 	char *response = NULL;
@@ -995,92 +716,6 @@ static apr_byte_t sts_util_http_wstrust(request_rec *r, const char *token,
 	return TRUE;
 }
 
-apr_byte_t sts_util_decode_json_object(request_rec *r, const char *str,
-		json_t **json) {
-
-	if (str == NULL)
-		return FALSE;
-
-	json_error_t json_error;
-	*json = json_loads(str, 0, &json_error);
-
-	/* decode the JSON contents of the buffer */
-	if (*json == NULL) {
-		/* something went wrong */
-		sts_error(r, "JSON parsing returned an error: %s (%s)", json_error.text,
-				str);
-		return FALSE;
-	}
-
-	if (!json_is_object(*json)) {
-		/* oops, no JSON */
-		sts_error(r, "parsed JSON did not contain a JSON object");
-		json_decref(*json);
-		*json = NULL;
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
-char *sts_util_encode_json_object(request_rec *r, json_t *json, size_t flags) {
-	char *s = json_dumps(json, flags);
-	char *s_value = apr_pstrdup(r->pool, s);
-	free(s);
-	return s_value;
-}
-
-static apr_byte_t sts_util_json_string_print(request_rec *r, json_t *result,
-		const char *key, const char *log) {
-	json_t *value = json_object_get(result, key);
-	if (value != NULL && !json_is_null(value)) {
-		sts_error(r,
-				"%s: response contained an \"%s\" entry with value: \"%s\"",
-				log, key,
-				sts_util_encode_json_object(r, value, JSON_ENCODE_ANY));
-		return TRUE;
-	}
-	return FALSE;
-}
-
-static apr_byte_t sts_util_check_json_error(request_rec *r, json_t *json) {
-	if (sts_util_json_string_print(r, json, "error",
-			"oidc_util_check_json_error") == TRUE) {
-		sts_util_json_string_print(r, json, "error_description",
-				"oidc_util_check_json_error");
-		return TRUE;
-	}
-	return FALSE;
-}
-
-apr_byte_t sts_util_decode_json_and_check_error(request_rec *r, const char *str,
-		json_t **json) {
-
-	if (sts_util_decode_json_object(r, str, json) == FALSE)
-		return FALSE;
-
-	// see if it is not an error response somehow
-	if (sts_util_check_json_error(r, *json) == TRUE) {
-		json_decref(*json);
-		*json = NULL;
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
-apr_byte_t sts_json_object_get_string(apr_pool_t *pool, json_t *json,
-		const char *name, char **value, const char *default_value) {
-	*value = default_value ? apr_pstrdup(pool, default_value) : NULL;
-	if (json != NULL) {
-		json_t *v = json_object_get(json, name);
-		if ((v != NULL) && (json_is_string(v))) {
-			*value = apr_pstrdup(pool, json_string_value(v));
-		}
-	}
-	return TRUE;
-}
-
 #define STS_ROPC_GRANT_TYPE_NAME  "grant_type"
 #define STS_ROPC_GRANT_TYPE_VALUE "password"
 #define STS_ROPC_CLIENT_ID        "client_id"
@@ -1088,7 +723,7 @@ apr_byte_t sts_json_object_get_string(apr_pool_t *pool, json_t *json,
 #define STS_ROPC_PASSWORD         "password"
 #define STS_ROPC_ACCESS_TOKEN     "access_token"
 
-static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
+static apr_byte_t sts_exec_ropc(request_rec *r, const char *token,
 		const char *basic_auth, int ssl_validate_server, char **rtoken) {
 
 	char *response = NULL;
@@ -1118,12 +753,12 @@ static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
 	if (sts_util_decode_json_and_check_error(r, response, &result) == FALSE)
 		return FALSE;
 
-	apr_byte_t rv = sts_json_object_get_string(r->pool, result,
+	apr_byte_t rv = sts_util_json_object_get_string(r->pool, result,
 			STS_ROPC_ACCESS_TOKEN, rtoken,
 			NULL);
 	/*
 	 char **token_type = NULL;
-	 oidc_json_object_get_string(r->pool, result, "token_type",
+	 sts_util_json_object_get_string(r->pool, result, "token_type",
 	 token_type,
 	 NULL);
 
@@ -1134,10 +769,10 @@ static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
 	 }
 	 }
 
-	 oidc_json_object_get_int(r->pool, result, OIDC_PROTO_EXPIRES_IN, expires_in,
+	 sts_util_json_object_get_int(r->pool, result, OIDC_PROTO_EXPIRES_IN, expires_in,
 	 -1);
 
-	 oidc_json_object_get_string(r->pool, result, OIDC_PROTO_REFRESH_TOKEN,
+	 sts_util_json_object_get_string(r->pool, result, OIDC_PROTO_REFRESH_TOKEN,
 	 refresh_token,
 	 NULL);
 	 */
@@ -1145,157 +780,6 @@ static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
 	json_decref(result);
 
 	return rv;
-}
-
-static const char *sts_util_hdr_in_get(const request_rec *r, const char *name) {
-	const char *value = apr_table_get(r->headers_in, name);
-	if (value)
-		sts_debug(r, "%s=%s", name, value);
-	return value;
-}
-
-static const char *sts_util_hdr_in_get_left_most_only(const request_rec *r,
-		const char *name, const char *separator) {
-	char *last = NULL;
-	const char *value = sts_util_hdr_in_get(r, name);
-	if (value)
-		return apr_strtok(apr_pstrdup(r->pool, value), separator, &last);
-	return NULL;
-}
-
-const char *sts_util_hdr_in_x_forwarded_proto_get(const request_rec *r) {
-	return sts_util_hdr_in_get_left_most_only(r, STS_HEADER_X_FORWARDED_PROTO,
-			",");
-}
-
-const char *sts_util_hdr_in_x_forwarded_host_get(const request_rec *r) {
-	return sts_util_hdr_in_get_left_most_only(r, STS_HEADER_X_FORWARDED_HOST,
-			",");
-}
-
-const char *sts_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
-	return sts_util_hdr_in_get_left_most_only(r, STS_HEADER_X_FORWARDED_PORT,
-			",");
-}
-
-const char *sts_util_hdr_in_host_get(const request_rec *r) {
-	return sts_util_hdr_in_get(r, STS_HEADER_HOST);
-}
-
-static const char *sts_get_current_url_scheme(const request_rec *r) {
-	/* first see if there's a proxy/load-balancer in front of us */
-	const char *scheme_str = sts_util_hdr_in_x_forwarded_proto_get(r);
-	/* if not we'll determine the scheme used to connect to this server */
-	if (scheme_str == NULL) {
-#ifdef APACHE2_0
-		scheme_str = (char *) ap_http_method(r);
-#else
-		scheme_str = (char *) ap_http_scheme(r);
-#endif
-	}
-	if ((scheme_str == NULL)
-			|| ((apr_strnatcmp(scheme_str, "http") != 0)
-					&& (apr_strnatcmp(scheme_str, "https") != 0))) {
-		sts_warn(r,
-				"detected HTTP scheme \"%s\" is not \"http\" nor \"https\"; perhaps your reverse proxy passes a wrongly configured \"%s\" header: falling back to default \"https\"",
-				scheme_str, STS_HEADER_X_FORWARDED_PROTO);
-		scheme_str = "https";
-	}
-	return scheme_str;
-}
-
-const char *sts_get_current_url_host(request_rec *r) {
-	const char *host_str = sts_util_hdr_in_x_forwarded_host_get(r);
-	if (host_str == NULL)
-		host_str = sts_util_hdr_in_host_get(r);
-	if (host_str) {
-		host_str = apr_pstrdup(r->pool, host_str);
-		char *p = strchr(host_str, ':');
-		if (p != NULL)
-			*p = '\0';
-	} else {
-		/* no Host header, HTTP 1.0 */
-		host_str = ap_get_server_name(r);
-	}
-	return host_str;
-}
-
-static const char *sts_get_current_url_port(const request_rec *r,
-		const char *scheme_str) {
-
-	/*
-	 * first see if there's a proxy/load-balancer in front of us
-	 * that sets X-Forwarded-Port
-	 */
-	const char *port_str = sts_util_hdr_in_x_forwarded_port_get(r);
-	if (port_str)
-		return port_str;
-
-	/*
-	 * see if we can get the port from the "X-Forwarded-Host" header
-	 * and if that header was set we'll assume defaults
-	 */
-	const char *host_hdr = sts_util_hdr_in_x_forwarded_host_get(r);
-	if (host_hdr) {
-		port_str = strchr(host_hdr, ':');
-		if (port_str)
-			port_str++;
-		return port_str;
-	}
-
-	/*
-	 * see if we can get the port from the "Host" header; if not
-	 * we'll determine the port locally
-	 */
-	host_hdr = sts_util_hdr_in_host_get(r);
-	if (host_hdr) {
-		port_str = strchr(host_hdr, ';');
-		if (port_str) {
-			port_str++;
-			return port_str;
-		}
-	}
-
-	/*
-	 * if X-Forwarded-Proto assume the default port otherwise the
-	 * port should have been set in the X-Forwarded-Port header
-	 */
-	if (sts_util_hdr_in_x_forwarded_proto_get(r))
-		return NULL;
-
-	/*
-	 * if no port was set in the Host header and no X-Forwarded-Proto was set, we'll
-	 * determine the port locally and don't print it when it's the default for the protocol
-	 */
-	const apr_port_t port = r->connection->local_addr->port;
-	if ((apr_strnatcmp(scheme_str, "https") == 0) && port == 443)
-		return NULL;
-	else if ((apr_strnatcmp(scheme_str, "http") == 0) && port == 80)
-		return NULL;
-
-	port_str = apr_psprintf(r->pool, "%u", port);
-	return port_str;
-}
-
-static const char *sts_get_current_url_base(request_rec *r) {
-
-	const char *scheme_str = sts_get_current_url_scheme(r);
-	const char *host_str = sts_get_current_url_host(r);
-	const char *port_str = sts_get_current_url_port(r, scheme_str);
-	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
-
-	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
-			NULL);
-
-	return url;
-}
-
-char *sts_get_current_url(request_rec *r) {
-	char *url = apr_pstrcat(r->pool, sts_get_current_url_base(r), r->uri,
-			(r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
-			NULL);
-	sts_debug(r, "current URL: %s", url);
-	return url;
 }
 
 #define STS_IETF_GRANT_TYPE_NAME          "grant_type"
@@ -1306,7 +790,7 @@ char *sts_get_current_url(request_rec *r) {
 #define STS_IETF_SUBJECT_TOKEN_TYPE_VALUE "urn:ietf:params:oauth:token-type:access_token"
 #define STS_IETF_ACCESS_TOKEN             "access_token"
 
-static apr_byte_t sts_util_http_ietf_token_exchange(request_rec *r,
+static apr_byte_t sts_exec_ietf_token_exchange(request_rec *r,
 		const char *token, const char *basic_auth, int ssl_validate_server,
 		char **rtoken) {
 
@@ -1316,7 +800,7 @@ static apr_byte_t sts_util_http_ietf_token_exchange(request_rec *r,
 
 	const char *resource = sts_get_resource(r);
 	if (resource == NULL)
-		resource = sts_get_current_url(r);
+		resource = sts_util_get_current_url(r);
 
 	/*
 	 example from IETF draft:
@@ -1348,7 +832,7 @@ static apr_byte_t sts_util_http_ietf_token_exchange(request_rec *r,
 	if (sts_util_decode_json_and_check_error(r, response, &result) == FALSE)
 		return FALSE;
 
-	apr_byte_t rv = sts_json_object_get_string(r->pool, result,
+	apr_byte_t rv = sts_util_json_object_get_string(r->pool, result,
 			STS_IETF_ACCESS_TOKEN, rtoken,
 			NULL);
 
@@ -1361,13 +845,12 @@ apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
 		const char *basic_auth, int ssl_validate_server, char **rtoken) {
 	int mode = sts_get_mode(r);
 	if (mode == STS_CONFIG_MODE_WSTRUST)
-		return sts_util_http_wstrust(r, token, basic_auth, ssl_validate_server,
+		return sts_exec_wstrust(r, token, basic_auth, ssl_validate_server,
 				rtoken);
 	if (mode == STS_CONFIG_MODE_ROPC)
-		return sts_util_http_ropc(r, token, basic_auth, ssl_validate_server,
-				rtoken);
+		return sts_exec_ropc(r, token, basic_auth, ssl_validate_server, rtoken);
 	if (mode == STS_CONFIG_MODE_TOKEN_EXCHANGE)
-		return sts_util_http_ietf_token_exchange(r, token, basic_auth,
+		return sts_exec_ietf_token_exchange(r, token, basic_auth,
 				ssl_validate_server, rtoken);
 	sts_error(r, "unknown STS mode %d", mode);
 	return FALSE;
@@ -1451,6 +934,7 @@ void *sts_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cache_expires_in = STS_CONFIG_POS_INT_UNSET;
 	c->cookie_name = NULL;
 	c->accept_token_in = STS_CONFIG_POS_INT_UNSET;
+	c->accept_token_in_options = NULL;
 	c->resource = NULL;
 	return c;
 }
@@ -1470,6 +954,11 @@ static void *sts_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->accept_token_in =
 			add->accept_token_in != STS_CONFIG_POS_INT_UNSET ?
 					add->accept_token_in : base->accept_token_in;
+	c->accept_token_in_options =
+			add->accept_token_in_options != NULL ?
+					add->accept_token_in_options :
+					base->accept_token_in_options;
+
 	c->resource = add->resource != NULL ? add->resource : base->resource;
 	return c;
 }
