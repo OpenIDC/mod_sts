@@ -1,4 +1,8 @@
-9/2xi54/2018
+9/24/2018
+- add configurable resource parameter support with STSResource
+- version 0.4.1
+
+9/24/2018
 - add STSSSLValidate server option and configurable STSHTTPTimeOut
 - correctly form-encode POST parameters
 - add support for draft IETF token exchange protocol

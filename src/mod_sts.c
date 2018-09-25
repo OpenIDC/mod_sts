@@ -43,10 +43,16 @@
  *
  **************************************************************************/
 
+// TODO: outgoing methods and options (e.g. cookie:mod_sts)
+// TODO: options on incoming method (e.g. cookie:PA.global)
+// TODO: client authentication options for all(!) STS methods
+// TODO: validate that PCV with refresh token uses username as defined by grant type
+// TODO: add cookies to backend according to STSPassCookies directive instead of overwriting?
 #include <httpd.h>
 #include <http_config.h>
 #include <http_request.h>
 #include <http_protocol.h>
+#include <http_core.h>
 
 #include <apr_hooks.h>
 #include <apr_optional.h>
@@ -114,6 +120,10 @@
 #define STS_HEADER_COOKIE                       "Cookie"
 #define STS_HEADER_SOAP_ACTION                  "soapAction"
 #define STS_HEADER_CONTENT_TYPE                 "Content-Type"
+#define STS_HEADER_HOST                         "Host"
+#define STS_HEADER_X_FORWARDED_PROTO            "X-Forwarded-Proto"
+#define STS_HEADER_X_FORWARDED_HOST             "X-Forwarded-Host"
+#define STS_HEADER_X_FORWARDED_PORT             "X-Forwarded-Port"
 
 static apr_status_t sts_cleanup_handler(void *data) {
 	server_rec *s = (server_rec *) data;
@@ -342,6 +352,12 @@ static int sts_get_accept_token_in(request_rec *r) {
 	return dir_cfg->accept_token_in;
 }
 
+static const char * sts_get_resource(request_rec *r) {
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+	return dir_cfg->resource;
+}
+
 char *sts_util_unescape_string(const request_rec *r, const char *str) {
 	CURL *curl = curl_easy_init();
 	if (curl == NULL) {
@@ -538,7 +554,7 @@ static int sts_handler(request_rec *r) {
 		if (sts_util_http_token_exchange(r, access_token, NULL,
 				sts_get_ssl_validation(r), &sts_token) == FALSE) {
 			sts_error(r, "sts_util_http_token_exchange failed");
-			return HTTP_INTERNAL_SERVER_ERROR;
+			return HTTP_UNAUTHORIZED;
 		}
 
 		sts_cache_shm_set(r, STS_CACHE_SECTION, access_token, sts_token,
@@ -547,8 +563,8 @@ static int sts_handler(request_rec *r) {
 
 	sts_debug(r, "set cookie to backend: %s=%s", sts_get_cookie_name(r),
 			sts_token);
-	// TODO: add the cookie to the existing ones instead of overwriting/replacing existing cookies?
-	apr_table_set(r->headers_in, "Cookie",
+
+	apr_table_set(r->headers_in, STS_HEADER_COOKIE,
 			apr_psprintf(r->pool, "%s=%s", sts_get_cookie_name(r), sts_token));
 
 	return OK;
@@ -1131,6 +1147,157 @@ static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
 	return rv;
 }
 
+static const char *sts_util_hdr_in_get(const request_rec *r, const char *name) {
+	const char *value = apr_table_get(r->headers_in, name);
+	if (value)
+		sts_debug(r, "%s=%s", name, value);
+	return value;
+}
+
+static const char *sts_util_hdr_in_get_left_most_only(const request_rec *r,
+		const char *name, const char *separator) {
+	char *last = NULL;
+	const char *value = sts_util_hdr_in_get(r, name);
+	if (value)
+		return apr_strtok(apr_pstrdup(r->pool, value), separator, &last);
+	return NULL;
+}
+
+const char *sts_util_hdr_in_x_forwarded_proto_get(const request_rec *r) {
+	return sts_util_hdr_in_get_left_most_only(r, STS_HEADER_X_FORWARDED_PROTO,
+			",");
+}
+
+const char *sts_util_hdr_in_x_forwarded_host_get(const request_rec *r) {
+	return sts_util_hdr_in_get_left_most_only(r, STS_HEADER_X_FORWARDED_HOST,
+			",");
+}
+
+const char *sts_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
+	return sts_util_hdr_in_get_left_most_only(r, STS_HEADER_X_FORWARDED_PORT,
+			",");
+}
+
+const char *sts_util_hdr_in_host_get(const request_rec *r) {
+	return sts_util_hdr_in_get(r, STS_HEADER_HOST);
+}
+
+static const char *sts_get_current_url_scheme(const request_rec *r) {
+	/* first see if there's a proxy/load-balancer in front of us */
+	const char *scheme_str = sts_util_hdr_in_x_forwarded_proto_get(r);
+	/* if not we'll determine the scheme used to connect to this server */
+	if (scheme_str == NULL) {
+#ifdef APACHE2_0
+		scheme_str = (char *) ap_http_method(r);
+#else
+		scheme_str = (char *) ap_http_scheme(r);
+#endif
+	}
+	if ((scheme_str == NULL)
+			|| ((apr_strnatcmp(scheme_str, "http") != 0)
+					&& (apr_strnatcmp(scheme_str, "https") != 0))) {
+		sts_warn(r,
+				"detected HTTP scheme \"%s\" is not \"http\" nor \"https\"; perhaps your reverse proxy passes a wrongly configured \"%s\" header: falling back to default \"https\"",
+				scheme_str, STS_HEADER_X_FORWARDED_PROTO);
+		scheme_str = "https";
+	}
+	return scheme_str;
+}
+
+const char *sts_get_current_url_host(request_rec *r) {
+	const char *host_str = sts_util_hdr_in_x_forwarded_host_get(r);
+	if (host_str == NULL)
+		host_str = sts_util_hdr_in_host_get(r);
+	if (host_str) {
+		host_str = apr_pstrdup(r->pool, host_str);
+		char *p = strchr(host_str, ':');
+		if (p != NULL)
+			*p = '\0';
+	} else {
+		/* no Host header, HTTP 1.0 */
+		host_str = ap_get_server_name(r);
+	}
+	return host_str;
+}
+
+static const char *sts_get_current_url_port(const request_rec *r,
+		const char *scheme_str) {
+
+	/*
+	 * first see if there's a proxy/load-balancer in front of us
+	 * that sets X-Forwarded-Port
+	 */
+	const char *port_str = sts_util_hdr_in_x_forwarded_port_get(r);
+	if (port_str)
+		return port_str;
+
+	/*
+	 * see if we can get the port from the "X-Forwarded-Host" header
+	 * and if that header was set we'll assume defaults
+	 */
+	const char *host_hdr = sts_util_hdr_in_x_forwarded_host_get(r);
+	if (host_hdr) {
+		port_str = strchr(host_hdr, ':');
+		if (port_str)
+			port_str++;
+		return port_str;
+	}
+
+	/*
+	 * see if we can get the port from the "Host" header; if not
+	 * we'll determine the port locally
+	 */
+	host_hdr = sts_util_hdr_in_host_get(r);
+	if (host_hdr) {
+		port_str = strchr(host_hdr, ';');
+		if (port_str) {
+			port_str++;
+			return port_str;
+		}
+	}
+
+	/*
+	 * if X-Forwarded-Proto assume the default port otherwise the
+	 * port should have been set in the X-Forwarded-Port header
+	 */
+	if (sts_util_hdr_in_x_forwarded_proto_get(r))
+		return NULL;
+
+	/*
+	 * if no port was set in the Host header and no X-Forwarded-Proto was set, we'll
+	 * determine the port locally and don't print it when it's the default for the protocol
+	 */
+	const apr_port_t port = r->connection->local_addr->port;
+	if ((apr_strnatcmp(scheme_str, "https") == 0) && port == 443)
+		return NULL;
+	else if ((apr_strnatcmp(scheme_str, "http") == 0) && port == 80)
+		return NULL;
+
+	port_str = apr_psprintf(r->pool, "%u", port);
+	return port_str;
+}
+
+static const char *sts_get_current_url_base(request_rec *r) {
+
+	const char *scheme_str = sts_get_current_url_scheme(r);
+	const char *host_str = sts_get_current_url_host(r);
+	const char *port_str = sts_get_current_url_port(r, scheme_str);
+	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
+
+	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
+			NULL);
+
+	return url;
+}
+
+char *sts_get_current_url(request_rec *r) {
+	char *url = apr_pstrcat(r->pool, sts_get_current_url_base(r), r->uri,
+			(r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
+			NULL);
+	sts_debug(r, "current URL: %s", url);
+	return url;
+}
+
 #define STS_IETF_GRANT_TYPE_NAME          "grant_type"
 #define STS_IETF_GRANT_TYPE_VALUE         "urn:ietf:params:oauth:grant-type:token-exchange"
 #define STS_IETF_RESOURCE_NAME            "resource"
@@ -1147,8 +1314,9 @@ static apr_byte_t sts_util_http_ietf_token_exchange(request_rec *r,
 
 	sts_debug(r, "enter");
 
-	// TODO:
-	char *resource = NULL;
+	const char *resource = sts_get_resource(r);
+	if (resource == NULL)
+		resource = sts_get_current_url(r);
 
 	/*
 	 example from IETF draft:
@@ -1162,7 +1330,7 @@ static apr_byte_t sts_util_http_ietf_token_exchange(request_rec *r,
 
 	apr_table_t *data = apr_table_make(r->pool, 4);
 	apr_table_addn(data, STS_IETF_GRANT_TYPE_NAME, STS_IETF_GRANT_TYPE_VALUE);
-	if (resource != NULL)
+	if (strcmp(resource, "") != 0)
 		apr_table_addn(data, STS_IETF_RESOURCE_NAME, resource);
 	apr_table_addn(data, STS_IETF_SUBJECT_TOKEN_NAME, token);
 	apr_table_addn(data, STS_IETF_SUBJECT_TOKEN_TYPE_NAME,
@@ -1283,6 +1451,7 @@ void *sts_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cache_expires_in = STS_CONFIG_POS_INT_UNSET;
 	c->cookie_name = NULL;
 	c->accept_token_in = STS_CONFIG_POS_INT_UNSET;
+	c->resource = NULL;
 	return c;
 }
 
@@ -1301,6 +1470,7 @@ static void *sts_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->accept_token_in =
 			add->accept_token_in != STS_CONFIG_POS_INT_UNSET ?
 					add->accept_token_in : base->accept_token_in;
+	c->resource = add->resource != NULL ? add->resource : base->resource;
 	return c;
 }
 
@@ -1339,6 +1509,13 @@ static const command_rec sts_cmds[] = {
 				(void*)APR_OFFSETOF(sts_server_config, http_timeout),
 				RSRC_CONF,
 				"Timeout for calls to the STS."),
+
+		AP_INIT_TAKE1(
+				"STSResource",
+				ap_set_string_slot,
+				(void*)APR_OFFSETOF(sts_dir_config, resource),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Set the STS resource value."),
 
 		AP_INIT_TAKE1(
 				"STSWSTrustUrl",

@@ -102,6 +102,7 @@ typedef struct {
 	int cache_expires_in;
 	char *cookie_name;
 	int accept_token_in;
+	char *resource;
 } sts_dir_config;
 
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr);
