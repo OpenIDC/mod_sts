@@ -88,6 +88,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	sts_module.module_index = 0;
 	sts_server_config *cfg = sts_create_server_config(request->pool,
 			request->server);
+	//cfg->mode = 1;
 
 	sts_dir_config *d_cfg = sts_create_dir_config(request->pool, NULL);
 	d_cfg->enabled = 1;

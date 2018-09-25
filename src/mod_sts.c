@@ -63,7 +63,7 @@
 
 #include "jansson.h"
 
-module AP_MODULE_DECLARE_DATA sts_module;
+//module AP_MODULE_DECLARE_DATA sts_module;
 
 #define STS_CONFIG_POS_INT_UNSET                -1
 #define STS_CONFIG_DEFAULT_ENABLED              1
@@ -81,6 +81,8 @@ module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_CONFIG_DEFAULT_ROPC_TOKEN_ENDPOINT  "https://localhost:9031/as/token.oauth2"
 #define STS_CONFIG_DEFAULT_ROPC_CLIENT_ID       "mod_sts"
 #define STS_CONFIG_DEFAULT_ROPC_USERNAME        NULL
+
+#define STS_CONFIG_DEFAULT_IETF_TOKEN_ENDPOINT  "https://localhost:9031/as/token.oauth2"
 
 #define STS_CONFIG_DEFAULT_CACHE_SHM_SIZE       2048
 #define STS_CONFIG_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 4096 + 512 + 17
@@ -103,6 +105,15 @@ module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_CONFIG_DEFAULT_ACCEPT_TOKEN_IN      (STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT | STS_CONFIG_ACCEPT_TOKEN_IN_HEADER)
 
 #define STS_CACHE_SECTION                       "sts"
+
+#define STS_CONFIG_DEFAULT_SSL_VALIDATION       1
+#define STS_CONFIG_DEFAULT_HTTP_TIMEOUT         20
+
+#define STS_CONTENT_TYPE_FORM_ENCODED           "application/x-www-form-urlencoded"
+
+#define STS_HEADER_COOKIE                       "Cookie"
+#define STS_HEADER_SOAP_ACTION                  "soapAction"
+#define STS_HEADER_CONTENT_TYPE                 "Content-Type"
 
 static apr_status_t sts_cleanup_handler(void *data) {
 	server_rec *s = (server_rec *) data;
@@ -149,6 +160,21 @@ static const char *sts_set_string_slot(cmd_parms *cmd, void *struct_ptr,
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			cmd->server->module_config, &sts_module);
 	return ap_set_string_slot(cmd, cfg, arg);
+}
+
+static const char *sts_set_http_timeout(cmd_parms *cmd, void *m,
+		const char *arg) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			cmd->server->module_config, &sts_module);
+	return ap_set_int_slot(cmd, cfg, arg);
+}
+
+static int sts_get_http_timeout(request_rec *r) {
+	sts_server_config *c = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (c->http_timeout == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_HTTP_TIMEOUT;
+	return c->http_timeout;
 }
 
 static const char * sts_get_wstrust_sts_url(request_rec *r) {
@@ -207,6 +233,14 @@ static const char * sts_get_ropc_username(request_rec *r) {
 	return c->ropc_username;
 }
 
+static const char * sts_get_ietf_token_endpoint(request_rec *r) {
+	sts_server_config *c = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (c->ietf_token_endpoint == NULL)
+		return STS_CONFIG_DEFAULT_IETF_TOKEN_ENDPOINT;
+	return c->ietf_token_endpoint;
+}
+
 static const char *sts_set_enabled(cmd_parms *cmd, void *m, const char *arg) {
 	sts_dir_config *dir_cfg = (sts_dir_config *) m;
 	if (strcmp(arg, "Off") == 0) {
@@ -226,6 +260,29 @@ static int sts_get_enabled(request_rec *r) {
 	if (dir_cfg->enabled == STS_CONFIG_POS_INT_UNSET)
 		return STS_CONFIG_DEFAULT_ENABLED;
 	return dir_cfg->enabled;
+}
+
+static const char *sts_set_ssl_validation(cmd_parms *cmd, void *m,
+		const char *arg) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			cmd->server->module_config, &sts_module);
+	if (strcmp(arg, "Off") == 0) {
+		cfg->ssl_validation = 0;
+		return NULL;
+	}
+	if (strcmp(arg, "On") == 0) {
+		cfg->ssl_validation = 1;
+		return NULL;
+	}
+	return "Invalid value: must be \"On\" or \"Off\"";
+}
+
+static int sts_get_ssl_validation(request_rec *r) {
+	sts_server_config *c = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (c->ssl_validation == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_SSL_VALIDATION;
+	return c->ssl_validation;
 }
 
 static int sts_get_cache_expires_in(request_rec *r) {
@@ -249,24 +306,29 @@ static const char *sts_set_mode(cmd_parms *cmd, void *m, const char *arg) {
 			cmd->server->module_config, &sts_module);
 	if (strcmp(arg, "wstrust") == 0) {
 		cfg->mode = STS_CONFIG_MODE_WSTRUST;
-		return NULL;
+		// TODO: why?
+		return ap_set_int_slot(cmd, cfg, "0");
 	}
 	if (strcmp(arg, "ropc") == 0) {
 		cfg->mode = STS_CONFIG_MODE_ROPC;
-		return NULL;
+		// TODO: why?
+		return ap_set_int_slot(cmd, cfg, "1");
 	}
 	if (strcmp(arg, "tokenexchange") == 0) {
 		cfg->mode = STS_CONFIG_MODE_TOKEN_EXCHANGE;
-		return NULL;
+		// TODO: why?
+		return ap_set_int_slot(cmd, cfg, "2");
 	}
+
 	return "Invalid value: must be \"wstrust\", \"ropc\" or \"tokenexchange\"";
 }
 
 static int sts_get_mode(request_rec *r) {
 	sts_server_config *c = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (c->mode == STS_CONFIG_POS_INT_UNSET)
+	if (c->mode == STS_CONFIG_POS_INT_UNSET) {
 		return STS_CONFIG_DEFAULT_STS_MODE;
+	}
 	return c->mode;
 }
 
@@ -347,8 +409,6 @@ apr_byte_t sts_util_read_form_encoded_params(request_rec *r, apr_table_t *table,
 
 	return TRUE;
 }
-
-#define STS_HEADER_COOKIE "Cookie"
 
 char *sts_util_get_cookie(request_rec *r, const char *cookieName) {
 	char *cookie, *tokenizerCtx, *rv = NULL;
@@ -498,8 +558,8 @@ static int sts_handler(request_rec *r) {
 
 	if (sts_token == NULL) {
 		sts_debug(r, "cache miss");
-		if (sts_util_http_token_exchange(r, access_token, NULL, 0,
-				&sts_token) == FALSE) {
+		if (sts_util_http_token_exchange(r, access_token, NULL,
+				sts_get_ssl_validation(r), &sts_token) == FALSE) {
 			sts_error(r, "sts_util_http_token_exchange failed");
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
@@ -566,6 +626,8 @@ size_t sts_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
 	return realsize;
 }
 
+#define STS_CURL_USER_AGENT     "mod_sts"
+
 static apr_byte_t sts_util_http_call(request_rec *r, const char *url,
 		const char *data, const char *content_type, const char *basic_auth,
 		const char *soap_action, int ssl_validate_server, char **response,
@@ -617,9 +679,9 @@ static apr_byte_t sts_util_http_call(request_rec *r, const char *url,
 
 	/* set the options for validating the SSL server certificate that the remote site presents */
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,
-			(ssl_validate_server != FALSE ? 1L : 0L));
+			(ssl_validate_server != 0 ? 1L : 0L));
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,
-			(ssl_validate_server != FALSE ? 2L : 0L));
+			(ssl_validate_server != 0 ? 2L : 0L));
 
 #ifdef WIN32
 	DWORD buflen;
@@ -635,7 +697,7 @@ static apr_byte_t sts_util_http_call(request_rec *r, const char *url,
 #endif
 
 	/* identify this HTTP client */
-	curl_easy_setopt(curl, CURLOPT_USERAGENT, "mod_auth_openidc");
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, STS_CURL_USER_AGENT);
 
 	/* set optional outgoing proxy for the local network */
 	if (outgoing_proxy) {
@@ -645,7 +707,8 @@ static apr_byte_t sts_util_http_call(request_rec *r, const char *url,
 	/* see if we need to add a soap action header */
 	if (soap_action != NULL) {
 		h_list = curl_slist_append(h_list,
-				apr_psprintf(r->pool, "soapAction: %s", soap_action));
+				apr_psprintf(r->pool, "%s: %s", STS_HEADER_SOAP_ACTION,
+						soap_action));
 	}
 
 	/* see if we need to perform HTTP basic authentication to the remote site */
@@ -669,7 +732,8 @@ static apr_byte_t sts_util_http_call(request_rec *r, const char *url,
 	if (content_type != NULL) {
 		/* set content type */
 		h_list = curl_slist_append(h_list,
-				apr_psprintf(r->pool, "Content-type: %s", content_type));
+				apr_psprintf(r->pool, "%s: %s", STS_HEADER_CONTENT_TYPE,
+						content_type));
 	}
 
 	/* see if we need to add any custom headers */
@@ -705,6 +769,64 @@ static apr_byte_t sts_util_http_call(request_rec *r, const char *url,
 	curl_easy_cleanup(curl);
 
 	return rv;
+}
+
+static char *sts_util_escape_string(const request_rec *r, const char *str) {
+	CURL *curl = curl_easy_init();
+	if (curl == NULL) {
+		sts_error(r, "curl_easy_init() error");
+		return NULL;
+	}
+	char *result = curl_easy_escape(curl, str, 0);
+	if (result == NULL) {
+		sts_error(r, "curl_easy_escape() error");
+		return NULL;
+	}
+	char *rv = apr_pstrdup(r->pool, result);
+	curl_free(result);
+	curl_easy_cleanup(curl);
+	return rv;
+}
+
+typedef struct sts_http_encode_t {
+	request_rec *r;
+	char *encoded_params;
+} sts_http_encode_t;
+
+static int sts_util_http_add_form_url_encoded_param(void* rec, const char* key,
+		const char* value) {
+	sts_http_encode_t *ctx = (sts_http_encode_t*) rec;
+	sts_debug(ctx->r, "processing: %s=%s", key, value);
+	const char *sep = ctx->encoded_params ? "&" : "";
+	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
+			ctx->encoded_params ? ctx->encoded_params : "", sep,
+					sts_util_escape_string(ctx->r, key),
+					sts_util_escape_string(ctx->r, value));
+	return 1;
+}
+
+static char *sts_util_http_form_encoded_data(request_rec *r,
+		const apr_table_t *params) {
+	char *data = NULL;
+	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
+		sts_http_encode_t encode_data = { r, NULL };
+		apr_table_do(sts_util_http_add_form_url_encoded_param, &encode_data,
+				params,
+				NULL);
+		data = encode_data.encoded_params;
+	}
+	sts_debug(r, "data=%s", data);
+	return data;
+}
+
+apr_byte_t sts_util_http_post_form(request_rec *r, const char *url,
+		const apr_table_t *params, const char *basic_auth,
+		int ssl_validate_server, char **response, int timeout,
+		const char *outgoing_proxy, const char *ssl_cert, const char *ssl_key) {
+	char *data = sts_util_http_form_encoded_data(r, params);
+	return sts_util_http_call(r, url, data,
+			STS_CONTENT_TYPE_FORM_ENCODED, basic_auth, NULL, ssl_validate_server,
+			response, timeout, outgoing_proxy, ssl_cert, ssl_key);
 }
 
 const char *ws_trust_soap_call_template =
@@ -834,8 +956,6 @@ static apr_byte_t sts_util_http_wstrust(request_rec *r, const char *token,
 	char *b64 = apr_palloc(r->pool, enc_len);
 	apr_base64_encode(b64, (const char *) token, strlen(token));
 
-	int timeout = 20;
-
 	apr_time_t now = apr_time_now();
 	apr_time_t then = now + apr_time_from_sec(300);
 	apr_size_t size;
@@ -857,7 +977,8 @@ static apr_byte_t sts_util_http_wstrust(request_rec *r, const char *token,
 
 	if (sts_util_http_call(r, sts_get_wstrust_sts_url(r), data,
 			"application/soap+xml; charset=utf-8", basic_auth,
-			sts_get_wstrust_sts_url(r), ssl_validate_server, &response, timeout,
+			sts_get_wstrust_sts_url(r), ssl_validate_server, &response,
+			sts_get_http_timeout(r),
 			NULL,
 			NULL, NULL) == FALSE) {
 		sts_error(r, "sts_util_http_call failed!");
@@ -973,35 +1094,30 @@ apr_byte_t sts_json_object_get_string(apr_pool_t *pool, json_t *json,
 #define STS_ROPC_USERNAME         "username"
 #define STS_ROPC_PASSWORD         "password"
 #define STS_ROPC_ACCESS_TOKEN     "access_token"
-#define STS_ROPC_CONTENT_TYPE     "application/x-www-form-urlencoded"
 
 static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
 		const char *basic_auth, int ssl_validate_server, char **rtoken) {
 
 	char *response = NULL;
-	int timeout = 20;
 
 	const char *client_id = sts_get_ropc_client_id(r);
 	const char *username = sts_get_ropc_username(r);
 
 	sts_debug(r, "enter");
 
-	char *data = apr_psprintf(r->pool, "%s=%s", STS_ROPC_GRANT_TYPE_NAME,
-			STS_ROPC_GRANT_TYPE_VALUE);
+	apr_table_t *data = apr_table_make(r->pool, 4);
+	apr_table_addn(data, STS_ROPC_GRANT_TYPE_NAME, STS_ROPC_GRANT_TYPE_VALUE);
 	if (client_id != NULL)
-		data = apr_psprintf(r->pool, "%s&%s=%s", data, STS_ROPC_CLIENT_ID,
-				client_id);
+		apr_table_addn(data, STS_ROPC_CLIENT_ID, client_id);
 	if (username != NULL)
-		data = apr_psprintf(r->pool, "%s&%s=%s", data, STS_ROPC_USERNAME,
-				username);
-	data = apr_psprintf(r->pool, "%s&%s=%s", data, STS_ROPC_PASSWORD, token);
+		apr_table_addn(data, STS_ROPC_USERNAME, username);
+	apr_table_addn(data, STS_ROPC_PASSWORD, token);
 
-	if (sts_util_http_call(r, sts_get_ropc_token_endpoint(r), data,
-			STS_ROPC_CONTENT_TYPE, basic_auth, sts_get_wstrust_sts_url(r),
-			ssl_validate_server, &response, timeout,
+	if (sts_util_http_post_form(r, sts_get_ropc_token_endpoint(r), data,
+			basic_auth, ssl_validate_server, &response, sts_get_http_timeout(r),
 			NULL,
 			NULL, NULL) == FALSE) {
-		sts_error(r, "sts_util_http_call failed!");
+		sts_error(r, "oidc_util_http_post_form failed!");
 		return FALSE;
 	}
 
@@ -1038,6 +1154,64 @@ static apr_byte_t sts_util_http_ropc(request_rec *r, const char *token,
 	return rv;
 }
 
+#define STS_IETF_GRANT_TYPE_NAME          "grant_type"
+#define STS_IETF_GRANT_TYPE_VALUE         "urn:ietf:params:oauth:grant-type:token-exchange"
+#define STS_IETF_RESOURCE_NAME            "resource"
+#define STS_IETF_SUBJECT_TOKEN_NAME       "subject_token"
+#define STS_IETF_SUBJECT_TOKEN_TYPE_NAME  "subject_token_type"
+#define STS_IETF_SUBJECT_TOKEN_TYPE_VALUE "urn:ietf:params:oauth:token-type:access_token"
+#define STS_IETF_ACCESS_TOKEN             "access_token"
+
+static apr_byte_t sts_util_http_ietf_token_exchange(request_rec *r,
+		const char *token, const char *basic_auth, int ssl_validate_server,
+		char **rtoken) {
+
+	char *response = NULL;
+
+	sts_debug(r, "enter");
+
+	// TODO:
+	char *resource = NULL;
+
+	/*
+	 example from IETF draft:
+
+	 grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange
+	 &resource=https%3A%2F%2Fbackend.example.com%2Fapi%20
+	 &subject_token=accVkjcJyb4BWCxGsndESCJQbdFMogUC5PbRDqceLTC
+	 &subject_token_type=
+	 urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token
+	 */
+
+	apr_table_t *data = apr_table_make(r->pool, 4);
+	apr_table_addn(data, STS_IETF_GRANT_TYPE_NAME, STS_IETF_GRANT_TYPE_VALUE);
+	if (resource != NULL)
+		apr_table_addn(data, STS_IETF_RESOURCE_NAME, resource);
+	apr_table_addn(data, STS_IETF_SUBJECT_TOKEN_NAME, token);
+	apr_table_addn(data, STS_IETF_SUBJECT_TOKEN_TYPE_NAME,
+			STS_IETF_SUBJECT_TOKEN_TYPE_VALUE);
+
+	if (sts_util_http_post_form(r, sts_get_ietf_token_endpoint(r), data,
+			basic_auth, ssl_validate_server, &response, sts_get_http_timeout(r),
+			NULL,
+			NULL, NULL) == FALSE) {
+		sts_error(r, "oidc_util_http_post_form failed!");
+		return FALSE;
+	}
+
+	json_t *result = NULL;
+	if (sts_util_decode_json_and_check_error(r, response, &result) == FALSE)
+		return FALSE;
+
+	apr_byte_t rv = sts_json_object_get_string(r->pool, result,
+			STS_IETF_ACCESS_TOKEN, rtoken,
+			NULL);
+
+	json_decref(result);
+
+	return rv;
+}
+
 apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
 		const char *basic_auth, int ssl_validate_server, char **rtoken) {
 	int mode = sts_get_mode(r);
@@ -1048,7 +1222,8 @@ apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
 		return sts_util_http_ropc(r, token, basic_auth, ssl_validate_server,
 				rtoken);
 	if (mode == STS_CONFIG_MODE_TOKEN_EXCHANGE)
-		return FALSE;
+		return sts_util_http_ietf_token_exchange(r, token, basic_auth,
+				ssl_validate_server, rtoken);
 	sts_error(r, "unknown STS mode %d", mode);
 	return FALSE;
 }
@@ -1057,6 +1232,8 @@ void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	sts_server_config *c = apr_pcalloc(pool, sizeof(sts_server_config));
 
 	c->mode = STS_CONFIG_POS_INT_UNSET;
+	c->ssl_validation = STS_CONFIG_POS_INT_UNSET;
+	c->http_timeout = STS_CONFIG_POS_INT_UNSET;
 
 	c->wstrust_sts_url = NULL;
 	c->wstrust_applies_to = NULL;
@@ -1066,6 +1243,8 @@ void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->ropc_token_endpoint = NULL;
 	c->ropc_client_id = NULL;
 	c->ropc_username = NULL;
+
+	c->ietf_token_endpoint = NULL;
 
 	c->cache_cfg = NULL;
 	//c->cache_shm_size_max = STS_CONFIG_POS_INT_UNSET;
@@ -1081,6 +1260,12 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	sts_server_config *add = ADD;
 
 	c->mode = add->mode != STS_CONFIG_POS_INT_UNSET ? add->mode : base->mode;
+	c->ssl_validation =
+			add->ssl_validation != STS_CONFIG_POS_INT_UNSET ?
+					add->ssl_validation : base->ssl_validation;
+	c->http_timeout =
+			add->http_timeout != STS_CONFIG_POS_INT_UNSET ?
+					add->http_timeout : base->http_timeout;
 
 	c->wstrust_sts_url =
 			add->wstrust_sts_url != NULL ?
@@ -1104,6 +1289,10 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->ropc_username =
 			add->ropc_username != NULL ?
 					add->ropc_username : base->ropc_username;
+
+	c->ietf_token_endpoint =
+			add->ietf_token_endpoint != NULL ?
+					add->ietf_token_endpoint : base->ietf_token_endpoint;
 
 	c->cache_cfg = add->cache_cfg != NULL ? add->cache_cfg : base->cache_cfg;
 	//c->cache_shm_size_max = add->cache_shm_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_size_max : base->cache_shm_size_max;
@@ -1151,16 +1340,28 @@ static const command_rec sts_cmds[] = {
 		AP_INIT_TAKE1(
 				"STSEnabled",
 				sts_set_enabled,
-				NULL,
+				(void*)APR_OFFSETOF(sts_dir_config, enabled),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Enable or disable mod_sts."),
 
 		AP_INIT_TAKE1(
 				"STSMode",
 				sts_set_mode,
-				NULL,
+				(void*)APR_OFFSETOF(sts_server_config, mode),
 				RSRC_CONF,
 				"Set STS mode to \"wstrust\", \"ropc\" or \"tokenexchange\"."),
+		AP_INIT_TAKE1(
+				"STSSSLValidateServer",
+				sts_set_ssl_validation,
+				(void*)APR_OFFSETOF(sts_server_config, ssl_validation),
+				RSRC_CONF,
+				"Enable or disable SSL server certificate validation for calls to the STS."),
+		AP_INIT_TAKE1(
+				"STSHTTPTimeOut",
+				sts_set_http_timeout,
+				(void*)APR_OFFSETOF(sts_server_config, http_timeout),
+				RSRC_CONF,
+				"Timeout for calls to the STS."),
 
 		AP_INIT_TAKE1(
 				"STSWSTrustUrl",
@@ -1204,7 +1405,14 @@ static const command_rec sts_cmds[] = {
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, ropc_username),
 				RSRC_CONF,
-				"Set the Username to be used in the OAuth 2.0 ROPC token request; if left empty the client_id will be passed in the username."),
+				"Set the username to be used in the OAuth 2.0 ROPC token request; if left empty the client_id will be passed in the username parameter."),
+
+		AP_INIT_TAKE1(
+				"STSIETFTokenEndpoint",
+				sts_set_string_slot,
+				(void*)APR_OFFSETOF(sts_server_config, ietf_token_endpoint),
+				RSRC_CONF,
+				"Set the IETF Token Exchange Endpoint."),
 
 		AP_INIT_TAKE1(
 				"STSCacheExpiresIn",
@@ -1222,7 +1430,7 @@ static const command_rec sts_cmds[] = {
 		AP_INIT_ITERATE(
 				"STSAcceptTokenIn",
 				sts_set_accept_token_in,
-				NULL,
+				(void*)APR_OFFSETOF(sts_dir_config, accept_token_in),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Configure how the access token may be presented; must be one or more of \"environment\", \"header\", \"query\" or \"cookie\"."),
 

@@ -78,6 +78,8 @@ APLOG_USE_MODULE(sts);
 
 typedef struct {
 	int mode;
+	int ssl_validation;
+	int http_timeout;
 
 	char *wstrust_sts_url;
 	char *wstrust_applies_to;
@@ -87,6 +89,8 @@ typedef struct {
 	char *ropc_token_endpoint;
 	char *ropc_client_id;
 	char *ropc_username;
+
+	char *ietf_token_endpoint;
 
 	void *cache_cfg;
 	int cache_shm_size_max;
