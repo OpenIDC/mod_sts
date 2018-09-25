@@ -162,143 +162,17 @@ static const char *sts_set_string_slot(cmd_parms *cmd, void *struct_ptr,
 	return ap_set_string_slot(cmd, cfg, arg);
 }
 
-static const char *sts_set_http_timeout(cmd_parms *cmd, void *m,
+static const char *sts_set_int_slot(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			cmd->server->module_config, &sts_module);
 	return ap_set_int_slot(cmd, cfg, arg);
 }
 
-static int sts_get_http_timeout(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->http_timeout == STS_CONFIG_POS_INT_UNSET)
-		return STS_CONFIG_DEFAULT_HTTP_TIMEOUT;
-	return c->http_timeout;
-}
-
-static const char * sts_get_wstrust_sts_url(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->wstrust_sts_url == NULL)
-		return STS_CONFIG_DEFAULT_WSTRUST_STS_URL;
-	return c->wstrust_sts_url;
-}
-
-static const char * sts_get_wstrust_applies_to(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->wstrust_applies_to == NULL)
-		return STS_CONFIG_DEFAULT_WSTRUST_APPLIES_TO;
-	return c->wstrust_applies_to;
-}
-
-static const char * sts_get_wstrust_token_type(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->wstrust_token_type == NULL)
-		return STS_CONFIG_DEFAULT_WSTRUST_TOKEN_TYPE;
-	return c->wstrust_token_type;
-}
-
-static const char * sts_get_wstrust_value_type(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->wstrust_value_type == NULL)
-		return STS_CONFIG_DEFAULT_WSTRUST_VALUE_TYPE;
-	return c->wstrust_value_type;
-}
-
-static const char * sts_get_ropc_token_endpoint(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->ropc_token_endpoint == NULL)
-		return STS_CONFIG_DEFAULT_ROPC_TOKEN_ENDPOINT;
-	return c->ropc_token_endpoint;
-}
-
-static const char * sts_get_ropc_client_id(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->ropc_client_id == NULL)
-		return STS_CONFIG_DEFAULT_ROPC_CLIENT_ID;
-	return c->ropc_client_id;
-}
-
-static const char * sts_get_ropc_username(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->ropc_username == NULL)
-		return sts_get_ropc_client_id(r);
-	return c->ropc_username;
-}
-
-static const char * sts_get_ietf_token_endpoint(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->ietf_token_endpoint == NULL)
-		return STS_CONFIG_DEFAULT_IETF_TOKEN_ENDPOINT;
-	return c->ietf_token_endpoint;
-}
-
-static const char *sts_set_enabled(cmd_parms *cmd, void *m, const char *arg) {
-	sts_dir_config *dir_cfg = (sts_dir_config *) m;
-	if (strcmp(arg, "Off") == 0) {
-		dir_cfg->enabled = 0;
-		return NULL;
-	}
-	if (strcmp(arg, "On") == 0) {
-		dir_cfg->enabled = 1;
-		return NULL;
-	}
-	return "Invalid value: must be \"On\" or \"Off\"";
-}
-
-static int sts_get_enabled(request_rec *r) {
-	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&sts_module);
-	if (dir_cfg->enabled == STS_CONFIG_POS_INT_UNSET)
-		return STS_CONFIG_DEFAULT_ENABLED;
-	return dir_cfg->enabled;
-}
-
-static const char *sts_set_ssl_validation(cmd_parms *cmd, void *m,
-		const char *arg) {
+static const char *sts_set_flag_slot(cmd_parms *cmd, void *struct_ptr, int arg) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			cmd->server->module_config, &sts_module);
-	if (strcmp(arg, "Off") == 0) {
-		cfg->ssl_validation = 0;
-		return NULL;
-	}
-	if (strcmp(arg, "On") == 0) {
-		cfg->ssl_validation = 1;
-		return NULL;
-	}
-	return "Invalid value: must be \"On\" or \"Off\"";
-}
-
-static int sts_get_ssl_validation(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->ssl_validation == STS_CONFIG_POS_INT_UNSET)
-		return STS_CONFIG_DEFAULT_SSL_VALIDATION;
-	return c->ssl_validation;
-}
-
-static int sts_get_cache_expires_in(request_rec *r) {
-	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&sts_module);
-	if (dir_cfg->cache_expires_in == STS_CONFIG_POS_INT_UNSET)
-		return STS_CONFIG_DEFAULT_CACHE_EXPIRES_IN;
-	return dir_cfg->cache_expires_in;
-}
-
-static char * sts_get_cookie_name(request_rec *r) {
-	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&sts_module);
-	if (dir_cfg->cookie_name == NULL)
-		return STS_CONFIG_DEFAULT_COOKIE_NAME;
-	return dir_cfg->cookie_name;
+	return ap_set_flag_slot(cmd, cfg, arg);
 }
 
 static const char *sts_set_mode(cmd_parms *cmd, void *m, const char *arg) {
@@ -306,30 +180,18 @@ static const char *sts_set_mode(cmd_parms *cmd, void *m, const char *arg) {
 			cmd->server->module_config, &sts_module);
 	if (strcmp(arg, "wstrust") == 0) {
 		cfg->mode = STS_CONFIG_MODE_WSTRUST;
-		// TODO: why?
-		return ap_set_int_slot(cmd, cfg, "0");
+		return NULL;
 	}
 	if (strcmp(arg, "ropc") == 0) {
 		cfg->mode = STS_CONFIG_MODE_ROPC;
-		// TODO: why?
-		return ap_set_int_slot(cmd, cfg, "1");
+		return NULL;
 	}
 	if (strcmp(arg, "tokenexchange") == 0) {
 		cfg->mode = STS_CONFIG_MODE_TOKEN_EXCHANGE;
-		// TODO: why?
-		return ap_set_int_slot(cmd, cfg, "2");
+		return NULL;
 	}
 
 	return "Invalid value: must be \"wstrust\", \"ropc\" or \"tokenexchange\"";
-}
-
-static int sts_get_mode(request_rec *r) {
-	sts_server_config *c = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (c->mode == STS_CONFIG_POS_INT_UNSET) {
-		return STS_CONFIG_DEFAULT_STS_MODE;
-	}
-	return c->mode;
 }
 
 static const char *sts_set_accept_token_in(cmd_parms *cmd, void *m,
@@ -356,6 +218,120 @@ static const char *sts_set_accept_token_in(cmd_parms *cmd, void *m,
 	}
 
 	return "Invalid value: must be \"environment\", \"header\", \"query\" or \"cookie\"";
+}
+
+static int sts_get_http_timeout(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->http_timeout == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_HTTP_TIMEOUT;
+	return cfg->http_timeout;
+}
+
+static const char * sts_get_wstrust_sts_url(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->wstrust_sts_url == NULL)
+		return STS_CONFIG_DEFAULT_WSTRUST_STS_URL;
+	return cfg->wstrust_sts_url;
+}
+
+static const char * sts_get_wstrust_applies_to(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->wstrust_applies_to == NULL)
+		return STS_CONFIG_DEFAULT_WSTRUST_APPLIES_TO;
+	return cfg->wstrust_applies_to;
+}
+
+static const char * sts_get_wstrust_token_type(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->wstrust_token_type == NULL)
+		return STS_CONFIG_DEFAULT_WSTRUST_TOKEN_TYPE;
+	return cfg->wstrust_token_type;
+}
+
+static const char * sts_get_wstrust_value_type(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->wstrust_value_type == NULL)
+		return STS_CONFIG_DEFAULT_WSTRUST_VALUE_TYPE;
+	return cfg->wstrust_value_type;
+}
+
+static const char * sts_get_ropc_token_endpoint(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->ropc_token_endpoint == NULL)
+		return STS_CONFIG_DEFAULT_ROPC_TOKEN_ENDPOINT;
+	return cfg->ropc_token_endpoint;
+}
+
+static const char * sts_get_ropc_client_id(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->ropc_client_id == NULL)
+		return STS_CONFIG_DEFAULT_ROPC_CLIENT_ID;
+	return cfg->ropc_client_id;
+}
+
+static const char * sts_get_ropc_username(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->ropc_username == NULL)
+		// return the client_id by default
+		return sts_get_ropc_client_id(r);
+	return cfg->ropc_username;
+}
+
+static const char * sts_get_ietf_token_endpoint(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->ietf_token_endpoint == NULL)
+		return STS_CONFIG_DEFAULT_IETF_TOKEN_ENDPOINT;
+	return cfg->ietf_token_endpoint;
+}
+
+static int sts_get_enabled(request_rec *r) {
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+	if (dir_cfg->enabled == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_ENABLED;
+	return dir_cfg->enabled;
+}
+
+static int sts_get_ssl_validation(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->ssl_validation == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_SSL_VALIDATION;
+	return cfg->ssl_validation;
+}
+
+static int sts_get_cache_expires_in(request_rec *r) {
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+	if (dir_cfg->cache_expires_in == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_CACHE_EXPIRES_IN;
+	return dir_cfg->cache_expires_in;
+}
+
+static char * sts_get_cookie_name(request_rec *r) {
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+	if (dir_cfg->cookie_name == NULL)
+		return STS_CONFIG_DEFAULT_COOKIE_NAME;
+	return dir_cfg->cookie_name;
+}
+
+static int sts_get_mode(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->mode == STS_CONFIG_POS_INT_UNSET) {
+		return STS_CONFIG_DEFAULT_STS_MODE;
+	}
+	return cfg->mode;
 }
 
 static int sts_get_accept_token_in(request_rec *r) {
@@ -515,6 +491,7 @@ static const char *sts_get_access_token(request_rec *r) {
 	const char *access_token = NULL;
 
 	int accept_token_in = sts_get_accept_token_in(r);
+	sts_debug(r, "accept_token_in: %d", accept_token_in);
 
 	if ((access_token == NULL)
 			&& (accept_token_in & STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT))
@@ -640,9 +617,9 @@ static apr_byte_t sts_util_http_call(request_rec *r, const char *url,
 
 	/* do some logging about the inputs */
 	sts_debug(r,
-			"url=%s, data=%s, content_type=%s, soap_action=%s, bearer_token=%s, ssl_validate_server=%d",
+			"url=%s, data=%s, content_type=%s, soap_action=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d",
 			url, data, content_type, basic_auth, soap_action,
-			ssl_validate_server);
+			ssl_validate_server, timeout);
 
 	curl = curl_easy_init();
 	if (curl == NULL) {
@@ -1337,9 +1314,9 @@ static void sts_register_hooks(apr_pool_t *p) {
 
 static const command_rec sts_cmds[] = {
 
-		AP_INIT_TAKE1(
+		AP_INIT_FLAG(
 				"STSEnabled",
-				sts_set_enabled,
+				ap_set_flag_slot,
 				(void*)APR_OFFSETOF(sts_dir_config, enabled),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Enable or disable mod_sts."),
@@ -1350,15 +1327,15 @@ static const command_rec sts_cmds[] = {
 				(void*)APR_OFFSETOF(sts_server_config, mode),
 				RSRC_CONF,
 				"Set STS mode to \"wstrust\", \"ropc\" or \"tokenexchange\"."),
-		AP_INIT_TAKE1(
+		AP_INIT_FLAG(
 				"STSSSLValidateServer",
-				sts_set_ssl_validation,
+				sts_set_flag_slot,
 				(void*)APR_OFFSETOF(sts_server_config, ssl_validation),
 				RSRC_CONF,
 				"Enable or disable SSL server certificate validation for calls to the STS."),
 		AP_INIT_TAKE1(
 				"STSHTTPTimeOut",
-				sts_set_http_timeout,
+				sts_set_int_slot,
 				(void*)APR_OFFSETOF(sts_server_config, http_timeout),
 				RSRC_CONF,
 				"Timeout for calls to the STS."),

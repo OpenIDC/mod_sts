@@ -2,7 +2,6 @@
 - add STSSSLValidate server option and configurable STSHTTPTimeOut
 - correctly form-encode POST parameters
 - add support for draft IETF token exchange protocol
-- TODO: fix server config settings (at least cfg->mode??)
 - version 0.4.0
 
 9/24/2018
