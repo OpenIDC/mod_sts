@@ -9,19 +9,19 @@ The split between external tokens and internal tokens may be created for securit
 
 ## Tokens
 
-##### Incoming
-An incoming token can be presented in a header (e.g. an `Authorization: bearer` header for OAuth 2.0 bearer access tokens), a query parameter or a cookie but the token can also be consumed from an environment variable set by a another Apache (authentication) module such as a validated access token set by [mod_auth_openidc](https://github.com/zmartzone/mod_auth_openidc) in OAuth 2.0 Resource Server mode.
+##### Source
+An source (or: incoming) token can be presented in a header (e.g. an `Authorization: bearer` header for OAuth 2.0 bearer access tokens), a query parameter or a cookie. Alternatively the token can be consumed from an environment variable set by a another Apache (authentication) module such as a validated access token set by [mod_auth_openidc](https://github.com/zmartzone/mod_auth_openidc) in OAuth 2.0 Resource Server mode.
 
-Sample incoming - source/external - tokens:
+Sample source - incoming/external - tokens:
 - an OAuth 2.0 bearer access token presented by an external OAuth 2.0 Client
 - a generic JWT not linked to an OAuth 2.0 Client
 - a generic cookie
 - a vendor specific token - e.g. an OpenToken produced by PingFederate - or a vendor specific cookie such an SSO cookie produced by CA SiteMinder or Oracle Access Manager
 
-##### Outgoing
-An outgoing token can be appended in a header (e.g. an `Authorization: bearer` header for OAuth 2.0 bearer access tokens), a query parameter or a cookie but the token can also be set as an environment variable so it can be consumed by another Apache module.
+##### Target
+A target (or: outgoing) token can be appended in a header (e.g. an `Authorization: bearer` header for OAuth 2.0 bearer access tokens), a query parameter or a cookie but the token can also be set as an environment variable so it can be consumed by another Apache module.
 
-Sample outgoing - target/internal - tokens:
+Sample target - outgoing/internal - tokens:
 - an OAuth 2.0 bearer access token, scoped to an internal service security domain
 - a generic JWT
 - a generic cookie
@@ -31,7 +31,7 @@ Sample outgoing - target/internal - tokens:
 This module supports a number of different protocols for interfacing with a Security Token Service:
 - WS-Trust, see: [https://en.wikipedia.org/wiki/WS-Trust](https://en.wikipedia.org/wiki/WS-Trust)
 - OAuth 2.0 Token Exchange, see: [https://www.ietf.org/id/draft-ietf-oauth-token-exchange](https://www.ietf.org/id/draft-ietf-oauth-token-exchange)
-- OAuth 2.0 Resource Owner Password Credentials flow where the access token is presented in the `password` parameter, which is a workaround to communicate with servers that don't support any of the two options above
+- OAuth 2.0 Resource Owner Password Credentials (ROPC) grant which is a workaround for communicating with servers that don't support any of the two options above but can be configured/programmed to validate a token presented in the `password` parameter of the ROPC grant and return an access token.
 
 ## Configuration
 For an exhaustive description of all configuration options, see the file `sts.conf`

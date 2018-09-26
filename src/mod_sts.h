@@ -113,9 +113,9 @@ typedef struct {
 typedef struct {
 	int enabled;
 	int cache_expires_in;
-	char *cookie_name;
-	int accept_token_in;
-	apr_hash_t *accept_token_in_options;
+	char *target_token_cookie_name;
+	int accept_source_token_in;
+	apr_hash_t *accept_source_token_in_options;
 	char *resource;
 } sts_dir_config;
 
