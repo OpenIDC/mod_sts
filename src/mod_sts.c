@@ -96,13 +96,6 @@
 
 #define STS_CONFIG_DEFAULT_STS_MODE             STS_CONFIG_MODE_WSTRUST
 
-#define STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT  1
-#define STS_CONFIG_ACCEPT_TOKEN_IN_HEADER       2
-#define STS_CONFIG_ACCEPT_TOKEN_IN_QUERY        4
-#define STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE       8
-
-#define STS_CONFIG_DEFAULT_ACCEPT_TOKEN_IN      (STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT | STS_CONFIG_ACCEPT_TOKEN_IN_HEADER)
-
 #define STS_CACHE_SECTION                       "sts"
 
 #define STS_CONFIG_DEFAULT_SSL_VALIDATION       1
@@ -110,12 +103,22 @@
 
 module AP_MODULE_DECLARE_DATA sts_module;
 
-static long STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT_INT =
-		STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT;
-static long STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_INT =
-		STS_CONFIG_ACCEPT_TOKEN_IN_QUERY;
-static long STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_INT =
-		STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE;
+#define STS_CONFIG_ACCEPT_TOKEN_IN_ENVVAR_STR   "environment"
+#define STS_CONFIG_ACCEPT_TOKEN_IN_ENVVAR       1
+#define STS_CONFIG_ACCEPT_TOKEN_IN_HEADER_STR   "header"
+#define STS_CONFIG_ACCEPT_TOKEN_IN_HEADER       2
+#define STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_STR    "query"
+#define STS_CONFIG_ACCEPT_TOKEN_IN_QUERY        4
+#define STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_STR   "cookie"
+#define STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE       8
+
+#define STS_CONFIG_DEFAULT_ACCEPT_TOKEN_IN      (STS_CONFIG_ACCEPT_TOKEN_IN_ENVVAR | STS_CONFIG_ACCEPT_TOKEN_IN_HEADER)
+
+#define STS_ACCEPT_TOKEN_IN_OPTION_SEPARATOR       ":"
+
+#define STS_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT     "PA.global"
+#define STS_ACCEPT_TOKEN_IN_ENVVAR_NAME_DEFAULT     "OIDC_access_token"
+#define STS_ACCEPT_TOKEN_IN_QUERY_PARAMNAME_DEFAULT "access_token"
 
 static apr_status_t sts_cleanup_handler(void *data) {
 	server_rec *s = (server_rec *) data;
@@ -196,20 +199,14 @@ static const char *sts_set_mode(cmd_parms *cmd, void *m, const char *arg) {
 	return "Invalid value: must be \"wstrust\", \"ropc\" or \"tokenexchange\"";
 }
 
-#define STS_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT         "PA.global"
-#define STS_ACCEPT_TOKEN_IN_ENVIRONMENT_VARNAME_DEFAULT "OIDC_access_token"
-#define STS_ACCEPT_TOKEN_IN_QUERY_PARAMNAME_DEFAULT     "access_token"
-#define STS_ACCEPT_TOKEN_IN_OPTIONS_SEPARATOR           ":"
-
 static void sts_set_accept_token_in_options(cmd_parms *cmd,
-		sts_dir_config *dir_cfg, long *type, const char *option,
-		char *default_value) {
-	if (dir_cfg->accept_token_in_options == NULL)
-		dir_cfg->accept_token_in_options = apr_hash_make(cmd->pool);
-	if (option == NULL)
-		option = default_value;
-	apr_hash_set(dir_cfg->accept_token_in_options, (const void *) type,
-			sizeof(long), apr_pstrdup(cmd->pool, option));
+		sts_dir_config *dir_cfg, const char *type, const char *option) {
+	if (option != NULL) {
+		if (dir_cfg->accept_token_in_options == NULL)
+			dir_cfg->accept_token_in_options = apr_hash_make(cmd->pool);
+		apr_hash_set(dir_cfg->accept_token_in_options, type,
+				APR_HASH_KEY_STRING, apr_pstrdup(cmd->pool, option));
+	}
 }
 
 static const char *sts_set_accept_token_in(cmd_parms *cmd, void *m,
@@ -219,29 +216,26 @@ static const char *sts_set_accept_token_in(cmd_parms *cmd, void *m,
 	int v = STS_CONFIG_POS_INT_UNSET;
 
 	const char *method = apr_pstrdup(cmd->pool, arg);
-	char *option = strstr(method, STS_ACCEPT_TOKEN_IN_OPTIONS_SEPARATOR);
+	char *option = strstr(method, STS_ACCEPT_TOKEN_IN_OPTION_SEPARATOR);
 	if (option != NULL) {
 		*option = '\0';
 		option++;
 	}
 
-	if (strcmp(method, "environment") == 0) {
-		v = STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT;
+	if (strcmp(method, STS_CONFIG_ACCEPT_TOKEN_IN_ENVVAR_STR) == 0) {
+		v = STS_CONFIG_ACCEPT_TOKEN_IN_ENVVAR;
 		sts_set_accept_token_in_options(cmd, dir_cfg,
-				&STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT_INT, option,
-				STS_ACCEPT_TOKEN_IN_ENVIRONMENT_VARNAME_DEFAULT);
-	} else if (strcmp(method, "header") == 0) {
+				STS_CONFIG_ACCEPT_TOKEN_IN_ENVVAR_STR, option);
+	} else if (strcmp(method, STS_CONFIG_ACCEPT_TOKEN_IN_HEADER_STR) == 0) {
 		v = STS_CONFIG_ACCEPT_TOKEN_IN_HEADER;
-	} else if (strcmp(method, "query") == 0) {
+	} else if (strcmp(method, STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_STR) == 0) {
 		v = STS_CONFIG_ACCEPT_TOKEN_IN_QUERY;
 		sts_set_accept_token_in_options(cmd, dir_cfg,
-				&STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_INT, option,
-				STS_ACCEPT_TOKEN_IN_QUERY_PARAMNAME_DEFAULT);
-	} else if (strcmp(method, "cookie") == 0) {
+				STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_STR, option);
+	} else if (strcmp(method, STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_STR) == 0) {
 		v = STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE;
 		sts_set_accept_token_in_options(cmd, dir_cfg,
-				&STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_INT, option,
-				STS_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT);
+				STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_STR, option);
 	}
 
 	if (v != STS_CONFIG_POS_INT_UNSET) {
@@ -383,14 +377,14 @@ static const char * sts_get_resource(request_rec *r) {
 	return dir_cfg->resource;
 }
 
-static char *sts_get_access_token_option(request_rec *r, long *v,
+static char *sts_get_access_token_option(request_rec *r, const char *type,
 		char *default_value) {
 	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&sts_module);
 	char *rv = NULL;
 	if (dir_cfg->accept_token_in_options != NULL)
-		rv = (char *) apr_hash_get(dir_cfg->accept_token_in_options,
-				(const void *) v, sizeof(long));
+		rv = (char *) apr_hash_get(dir_cfg->accept_token_in_options, type,
+				APR_HASH_KEY_STRING);
 	return ((rv != NULL) ? rv : default_value);
 }
 
@@ -398,8 +392,8 @@ static char *sts_get_access_token_from_environment(request_rec *r) {
 	sts_debug(r, "enter");
 
 	char *envvar_name = sts_get_access_token_option(r,
-			&STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT_INT,
-			STS_ACCEPT_TOKEN_IN_ENVIRONMENT_VARNAME_DEFAULT);
+			STS_CONFIG_ACCEPT_TOKEN_IN_ENVVAR_STR,
+			STS_ACCEPT_TOKEN_IN_ENVVAR_NAME_DEFAULT);
 	char *access_token = apr_pstrdup(r->pool,
 			apr_table_get(r->subprocess_env, envvar_name));
 
@@ -442,7 +436,7 @@ static char *sts_get_access_token_from_query(request_rec *r) {
 	sts_util_read_form_encoded_params(r, params, r->args);
 
 	char *query_param_name = sts_get_access_token_option(r,
-			&STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_INT,
+			STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_STR,
 			STS_ACCEPT_TOKEN_IN_QUERY_PARAMNAME_DEFAULT);
 	access_token = apr_pstrdup(r->pool,
 			apr_table_get(params, query_param_name));
@@ -457,7 +451,7 @@ static char *sts_get_access_token_from_query(request_rec *r) {
 static char *sts_get_access_token_from_cookie(request_rec *r) {
 	sts_debug(r, "enter");
 	char *cookie_name = sts_get_access_token_option(r,
-			&STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_INT,
+			STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_STR,
 			STS_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT);
 	char *access_token = sts_util_get_cookie(r, cookie_name);
 	if (access_token == NULL)
@@ -472,7 +466,7 @@ static const char *sts_get_access_token(request_rec *r) {
 	int accept_token_in = sts_get_accept_token_in(r);
 
 	if ((access_token == NULL)
-			&& (accept_token_in & STS_CONFIG_ACCEPT_TOKEN_IN_ENVIRONMENT))
+			&& (accept_token_in & STS_CONFIG_ACCEPT_TOKEN_IN_ENVVAR))
 		access_token = sts_get_access_token_from_environment(r);
 
 	if ((access_token == NULL)
@@ -1075,7 +1069,7 @@ static const command_rec sts_cmds[] = {
 				sts_set_accept_token_in,
 				(void*)APR_OFFSETOF(sts_dir_config, accept_token_in),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Configure how the access token may be presented; must be one or more of \"environment\", \"header\", \"query\" or \"cookie\"."),
+				"Configure how the access token may be presented; must be one or more of \"" STS_CONFIG_ACCEPT_TOKEN_IN_ENVVAR_STR "\", \"" STS_CONFIG_ACCEPT_TOKEN_IN_HEADER_STR "\", \"" STS_CONFIG_ACCEPT_TOKEN_IN_QUERY_STR "\" or \"" STS_CONFIG_ACCEPT_TOKEN_IN_COOKIE_STR "\"."),
 
 		{ NULL }
 
