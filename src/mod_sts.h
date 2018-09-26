@@ -85,6 +85,7 @@ APLOG_USE_MODULE(sts);
 #define STS_HEADER_X_FORWARDED_PROTO            "X-Forwarded-Proto"
 #define STS_HEADER_X_FORWARDED_HOST             "X-Forwarded-Host"
 #define STS_HEADER_X_FORWARDED_PORT             "X-Forwarded-Port"
+#define STS_HEADER_AUTHORIZATION                "Authorization"
 
 #define STS_CONTENT_TYPE_FORM_ENCODED           "application/x-www-form-urlencoded"
 
@@ -132,8 +133,8 @@ apr_byte_t sts_cache_shm_set(request_rec *r, const char *section,
 		const char *key, const char *value, apr_time_t expiry);
 int sts_cache_shm_destroy(server_rec *s);
 
-apr_byte_t sts_util_read_form_encoded_params(request_rec *r, apr_table_t *table,
-		char *data);
+apr_byte_t sts_util_read_form_encoded_params(apr_pool_t *pool,
+		apr_table_t *table, char *data);
 char *sts_util_get_cookie(request_rec *r, const char *cookieName);
 apr_byte_t sts_util_http_call(request_rec *r, const char *url, const char *data,
 		const char *content_type, const char *basic_auth,

@@ -49,12 +49,10 @@
 
 #include "mod_sts.h"
 
-static char *sts_util_unescape_string(const request_rec *r, const char *str) {
+static char *sts_util_unescape_string(apr_pool_t *pool, const char *str) {
 	CURL *curl = curl_easy_init();
-	if (curl == NULL) {
-		sts_error(r, "curl_easy_init() error");
+	if (curl == NULL)
 		return NULL;
-	}
 	int counter = 0;
 	char *replaced = (char *) str;
 	while (str[counter] != '\0') {
@@ -64,31 +62,24 @@ static char *sts_util_unescape_string(const request_rec *r, const char *str) {
 		counter++;
 	}
 	char *result = curl_easy_unescape(curl, replaced, 0, 0);
-	if (result == NULL) {
-		sts_error(r, "curl_easy_unescape() error");
+	if (result == NULL)
 		return NULL;
-	}
-	char *rv = apr_pstrdup(r->pool, result);
+	char *rv = apr_pstrdup(pool, result);
 	curl_free(result);
 	curl_easy_cleanup(curl);
-	//sts_debug(r, "input=\"%s\", output=\"%s\"", str, rv);
 	return rv;
 }
 
-apr_byte_t sts_util_read_form_encoded_params(request_rec *r, apr_table_t *table,
-		char *data) {
+apr_byte_t sts_util_read_form_encoded_params(apr_pool_t *pool,
+		apr_table_t *table, char *data) {
 	const char *key, *val, *p = data;
 
-	while (p && *p && (val = ap_getword(r->pool, &p, '&'))) {
-		key = ap_getword(r->pool, &val, '=');
-		key = sts_util_unescape_string(r, key);
-		val = sts_util_unescape_string(r, val);
-		sts_debug(r, "read: %s=%s", key, val);
+	while (p && *p && (val = ap_getword(pool, &p, '&'))) {
+		key = ap_getword(pool, &val, '=');
+		key = sts_util_unescape_string(pool, key);
+		val = sts_util_unescape_string(pool, val);
 		apr_table_set(table, key, val);
 	}
-
-	sts_debug(r, "parsed: %d bytes into %d elements",
-			data ? (int )strlen(data) : 0, apr_table_elts(table)->nelts);
 
 	return TRUE;
 }
@@ -140,7 +131,8 @@ typedef struct sts_util_curl_buffer {
 
 #define STS_CURL_MAX_RESPONSE_SIZE 1024 * 1024
 
-static size_t sts_util_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
+static size_t sts_util_curl_write(void *contents, size_t size, size_t nmemb,
+		void *userp) {
 	size_t realsize = size * nmemb;
 	sts_util_curl_buffer *mem = (sts_util_curl_buffer *) userp;
 
@@ -173,8 +165,8 @@ static size_t sts_util_curl_write(void *contents, size_t size, size_t nmemb, voi
 
 #define STS_CURL_USER_AGENT     "mod_sts"
 
-apr_byte_t sts_util_http_call(request_rec *r, const char *url,
-		const char *data, const char *content_type, const char *basic_auth,
+apr_byte_t sts_util_http_call(request_rec *r, const char *url, const char *data,
+		const char *content_type, const char *basic_auth,
 		const char *soap_action, int ssl_validate_server, char **response,
 		int timeout, const char *outgoing_proxy, const char *ssl_cert,
 		const char *ssl_key) {
@@ -402,7 +394,8 @@ static apr_byte_t sts_util_decode_json_object(request_rec *r, const char *str,
 	return TRUE;
 }
 
-static char *sts_util_encode_json_object(request_rec *r, json_t *json, size_t flags) {
+static char *sts_util_encode_json_object(request_rec *r, json_t *json,
+		size_t flags) {
 	char *s = json_dumps(json, flags);
 	char *s_value = apr_pstrdup(r->pool, s);
 	free(s);
