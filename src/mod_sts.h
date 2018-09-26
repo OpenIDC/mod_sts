@@ -103,7 +103,7 @@ typedef struct {
 	char *ropc_client_id;
 	char *ropc_username;
 
-	char *ietf_token_endpoint;
+	char *oauth_token_exchange_endpoint;
 
 	void *cache_cfg;
 	int cache_shm_size_max;

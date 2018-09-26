@@ -81,7 +81,7 @@
 #define STS_CONFIG_DEFAULT_ROPC_CLIENT_ID       "mod_sts"
 #define STS_CONFIG_DEFAULT_ROPC_USERNAME        NULL
 
-#define STS_CONFIG_DEFAULT_IETF_TOKEN_ENDPOINT  "https://localhost:9031/as/token.oauth2"
+#define STS_CONFIG_DEFAULT_OAUTH_TX_ENDPOINT    "https://localhost:9031/as/token.oauth2"
 
 #define STS_CONFIG_DEFAULT_CACHE_SHM_SIZE       2048
 #define STS_CONFIG_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 4096 + 512 + 17
@@ -90,9 +90,12 @@
 
 #define STS_CONFIG_DEFAULT_COOKIE_NAME          "sts_cookie"
 
+#define STS_CONFIG_MODE_WSTRUST_STR             "wstrust"
 #define STS_CONFIG_MODE_WSTRUST                 0
+#define STS_CONFIG_MODE_ROPC_STR                "ropc"
 #define STS_CONFIG_MODE_ROPC                    1
-#define STS_CONFIG_MODE_TOKEN_EXCHANGE          2
+#define STS_CONFIG_MODE_OAUTH_TX_STR            "oauth"
+#define STS_CONFIG_MODE_OAUTH_TX                2
 
 #define STS_CONFIG_DEFAULT_STS_MODE             STS_CONFIG_MODE_WSTRUST
 
@@ -120,11 +123,11 @@ module AP_MODULE_DECLARE_DATA sts_module;
 
 #define STS_HEADER_AUTHORIZATION_BEARER         "Bearer"
 
-#define STS_ACCEPT_TOKEN_IN_HEADER_NAME_DEFAULT     STS_HEADER_AUTHORIZATION
-#define STS_ACCEPT_TOKEN_IN_HEADER_TYPE_DEFAULT     STS_HEADER_AUTHORIZATION_BEARER
-#define STS_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT     "PA.global"
-#define STS_ACCEPT_TOKEN_IN_ENVVAR_NAME_DEFAULT     "OIDC_access_token"
-#define STS_ACCEPT_TOKEN_IN_QUERY_PARAMNAME_DEFAULT "access_token"
+#define STS_ACCEPT_TOKEN_IN_HEADER_NAME_DEFAULT       STS_HEADER_AUTHORIZATION
+#define STS_ACCEPT_TOKEN_IN_HEADER_TYPE_DEFAULT       STS_HEADER_AUTHORIZATION_BEARER
+#define STS_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT       "PA.global"
+#define STS_ACCEPT_TOKEN_IN_ENVVAR_NAME_DEFAULT       "OIDC_access_token"
+#define STS_ACCEPT_TOKEN_IN_QUERY_PARAMNAME_DEFAULT   "access_token"
 
 static apr_status_t sts_cleanup_handler(void *data) {
 	server_rec *s = (server_rec *) data;
@@ -189,20 +192,20 @@ static const char *sts_set_flag_slot(cmd_parms *cmd, void *struct_ptr, int arg) 
 static const char *sts_set_mode(cmd_parms *cmd, void *m, const char *arg) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			cmd->server->module_config, &sts_module);
-	if (strcmp(arg, "wstrust") == 0) {
+	if (strcmp(arg, STS_CONFIG_MODE_WSTRUST_STR) == 0) {
 		cfg->mode = STS_CONFIG_MODE_WSTRUST;
 		return NULL;
 	}
-	if (strcmp(arg, "ropc") == 0) {
+	if (strcmp(arg, STS_CONFIG_MODE_ROPC_STR) == 0) {
 		cfg->mode = STS_CONFIG_MODE_ROPC;
 		return NULL;
 	}
-	if (strcmp(arg, "tokenexchange") == 0) {
-		cfg->mode = STS_CONFIG_MODE_TOKEN_EXCHANGE;
+	if (strcmp(arg, STS_CONFIG_MODE_OAUTH_TX_STR) == 0) {
+		cfg->mode = STS_CONFIG_MODE_OAUTH_TX;
 		return NULL;
 	}
 
-	return "Invalid value: must be \"wstrust\", \"ropc\" or \"tokenexchange\"";
+	return "Invalid value: must be \"" STS_CONFIG_MODE_WSTRUST_STR "\", \"" STS_CONFIG_MODE_ROPC_STR "\" or \"" STS_CONFIG_MODE_OAUTH_TX_STR "\"";
 }
 
 static void sts_set_accept_token_in_options(cmd_parms *cmd,
@@ -329,12 +332,12 @@ static const char * sts_get_ropc_username(request_rec *r) {
 	return cfg->ropc_username;
 }
 
-static const char * sts_get_ietf_token_endpoint(request_rec *r) {
+static const char * sts_get_oauth_token_exchange_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (cfg->ietf_token_endpoint == NULL)
-		return STS_CONFIG_DEFAULT_IETF_TOKEN_ENDPOINT;
-	return cfg->ietf_token_endpoint;
+	if (cfg->oauth_token_exchange_endpoint == NULL)
+		return STS_CONFIG_DEFAULT_OAUTH_TX_ENDPOINT;
+	return cfg->oauth_token_exchange_endpoint;
 }
 
 static int sts_get_enabled(request_rec *r) {
@@ -808,15 +811,15 @@ static apr_byte_t sts_exec_ropc(request_rec *r, const char *token,
 	return rv;
 }
 
-#define STS_IETF_GRANT_TYPE_NAME          "grant_type"
-#define STS_IETF_GRANT_TYPE_VALUE         "urn:ietf:params:oauth:grant-type:token-exchange"
-#define STS_IETF_RESOURCE_NAME            "resource"
-#define STS_IETF_SUBJECT_TOKEN_NAME       "subject_token"
-#define STS_IETF_SUBJECT_TOKEN_TYPE_NAME  "subject_token_type"
-#define STS_IETF_SUBJECT_TOKEN_TYPE_VALUE "urn:ietf:params:oauth:token-type:access_token"
-#define STS_IETF_ACCESS_TOKEN             "access_token"
+#define STS_OAUTH_TX_GRANT_TYPE_NAME          "grant_type"
+#define STS_OAUTH_TX_GRANT_TYPE_VALUE         "urn:ietf:params:oauth:grant-type:token-exchange"
+#define STS_OAUTH_TX_RESOURCE_NAME            "resource"
+#define STS_OAUTH_TX_SUBJECT_TOKEN_NAME       "subject_token"
+#define STS_OAUTH_TX_SUBJECT_TOKEN_TYPE_NAME  "subject_token_type"
+#define STS_OAUTH_TX_SUBJECT_TOKEN_TYPE_VALUE "urn:ietf:params:oauth:token-type:access_token"
+#define STS_OAUTH_TX_ACCESS_TOKEN             "access_token"
 
-static apr_byte_t sts_exec_ietf_token_exchange(request_rec *r,
+static apr_byte_t sts_exec_oauth_token_exchange(request_rec *r,
 		const char *token, const char *basic_auth, int ssl_validate_server,
 		char **rtoken) {
 
@@ -839,15 +842,17 @@ static apr_byte_t sts_exec_ietf_token_exchange(request_rec *r,
 	 */
 
 	apr_table_t *data = apr_table_make(r->pool, 4);
-	apr_table_addn(data, STS_IETF_GRANT_TYPE_NAME, STS_IETF_GRANT_TYPE_VALUE);
+	apr_table_addn(data, STS_OAUTH_TX_GRANT_TYPE_NAME,
+			STS_OAUTH_TX_GRANT_TYPE_VALUE);
 	if (strcmp(resource, "") != 0)
-		apr_table_addn(data, STS_IETF_RESOURCE_NAME, resource);
-	apr_table_addn(data, STS_IETF_SUBJECT_TOKEN_NAME, token);
-	apr_table_addn(data, STS_IETF_SUBJECT_TOKEN_TYPE_NAME,
-			STS_IETF_SUBJECT_TOKEN_TYPE_VALUE);
+		apr_table_addn(data, STS_OAUTH_TX_RESOURCE_NAME, resource);
+	apr_table_addn(data, STS_OAUTH_TX_SUBJECT_TOKEN_NAME, token);
+	apr_table_addn(data, STS_OAUTH_TX_SUBJECT_TOKEN_TYPE_NAME,
+			STS_OAUTH_TX_SUBJECT_TOKEN_TYPE_VALUE);
 
-	if (sts_util_http_post_form(r, sts_get_ietf_token_endpoint(r), data,
-			basic_auth, ssl_validate_server, &response, sts_get_http_timeout(r),
+	if (sts_util_http_post_form(r, sts_get_oauth_token_exchange_endpoint(r),
+			data, basic_auth, ssl_validate_server, &response,
+			sts_get_http_timeout(r),
 			NULL,
 			NULL, NULL) == FALSE) {
 		sts_error(r, "oidc_util_http_post_form failed!");
@@ -859,7 +864,7 @@ static apr_byte_t sts_exec_ietf_token_exchange(request_rec *r,
 		return FALSE;
 
 	apr_byte_t rv = sts_util_json_object_get_string(r->pool, result,
-			STS_IETF_ACCESS_TOKEN, rtoken,
+			STS_OAUTH_TX_ACCESS_TOKEN, rtoken,
 			NULL);
 
 	json_decref(result);
@@ -875,8 +880,8 @@ apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
 				rtoken);
 	if (mode == STS_CONFIG_MODE_ROPC)
 		return sts_exec_ropc(r, token, basic_auth, ssl_validate_server, rtoken);
-	if (mode == STS_CONFIG_MODE_TOKEN_EXCHANGE)
-		return sts_exec_ietf_token_exchange(r, token, basic_auth,
+	if (mode == STS_CONFIG_MODE_OAUTH_TX)
+		return sts_exec_oauth_token_exchange(r, token, basic_auth,
 				ssl_validate_server, rtoken);
 	sts_error(r, "unknown STS mode %d", mode);
 	return FALSE;
@@ -898,7 +903,7 @@ void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->ropc_client_id = NULL;
 	c->ropc_username = NULL;
 
-	c->ietf_token_endpoint = NULL;
+	c->oauth_token_exchange_endpoint = NULL;
 
 	c->cache_cfg = NULL;
 	//c->cache_shm_size_max = STS_CONFIG_POS_INT_UNSET;
@@ -944,9 +949,10 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->ropc_username != NULL ?
 					add->ropc_username : base->ropc_username;
 
-	c->ietf_token_endpoint =
-			add->ietf_token_endpoint != NULL ?
-					add->ietf_token_endpoint : base->ietf_token_endpoint;
+	c->oauth_token_exchange_endpoint =
+			add->oauth_token_exchange_endpoint != NULL ?
+					add->oauth_token_exchange_endpoint :
+					base->oauth_token_exchange_endpoint;
 
 	c->cache_cfg = add->cache_cfg != NULL ? add->cache_cfg : base->cache_cfg;
 	//c->cache_shm_size_max = add->cache_shm_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_size_max : base->cache_shm_size_max;
@@ -1077,11 +1083,11 @@ static const command_rec sts_cmds[] = {
 				"Set the username to be used in the OAuth 2.0 ROPC token request; if left empty the client_id will be passed in the username parameter."),
 
 		AP_INIT_TAKE1(
-				"STSIETFTokenEndpoint",
+				"STSOAuthTokenExchangeEndpoint",
 				sts_set_string_slot,
-				(void*)APR_OFFSETOF(sts_server_config, ietf_token_endpoint),
+				(void*)APR_OFFSETOF(sts_server_config, oauth_token_exchange_endpoint),
 				RSRC_CONF,
-				"Set the IETF Token Exchange Endpoint."),
+				"Set the OAuth 2.0 Token Exchange Endpoint."),
 
 		AP_INIT_TAKE1(
 				"STSCacheExpiresIn",
