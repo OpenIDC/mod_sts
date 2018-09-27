@@ -44,6 +44,7 @@
  **************************************************************************/
 
 // TODO: add client_secret_jwt and private_key_jwt to the auth options of the OAuth-based STS methods
+//       they need cjose...
 // TODO: check for a sane configuration at startup (and leave current localhost defaults to null)
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
@@ -756,7 +757,7 @@ static int sts_fixup_handler(request_rec *r) {
 
 apr_byte_t sts_get_endpoint_auth_cert_key(request_rec *r, apr_hash_t *options,
 		const char **client_cert, const char **client_key) {
-	 const char *cert = sts_get_config_method_option(r, options,
+	const char *cert = sts_get_config_method_option(r, options,
 			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
 			STS_ENDPOINT_AUTH_OPTION_CERT,
 			NULL);

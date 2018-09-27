@@ -124,7 +124,7 @@ int main(int argc, char **argv, char **env) {
 	char *token = argv[1];
 	char *response = NULL;
 
-	apr_byte_t result = sts_util_http_token_exchange(r, token, &response);
+	apr_byte_t result = sts_util_token_exchange(r, token, &response);
 
 	if (result == TRUE) {
 		printf("Success: %s\n", response);

@@ -51,6 +51,7 @@
 #include <apr_hash.h>
 
 #include <httpd.h>
+#include <http_config.h>
 #include <http_log.h>
 #include <http_request.h>
 #include <http_protocol.h>
@@ -59,7 +60,10 @@
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(sts);
+static int * const aplog_module_index;
 #endif
+
+extern module AP_MODULE_DECLARE_DATA sts_module;
 
 #ifndef NAMEVER
 #define NAMEVERSION "mod_sts-0.0.0"

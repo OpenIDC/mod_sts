@@ -223,3 +223,7 @@ AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index,
 		AP_DECLARE(int) ap_hook_post_read_request(request_rec *r) {
 			return 0;
 		}
+
+		AP_DECLARE(char *) ap_server_root_relative(apr_pool_t *p, const char *file) {
+			return "";
+		}
