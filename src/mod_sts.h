@@ -120,6 +120,7 @@ extern const int STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
 #define STS_ENDPOINT_AUTH_OPTION_SECRET            "secret"
 #define STS_ENDPOINT_AUTH_OPTION_CERT              "cert"
 #define STS_ENDPOINT_AUTH_OPTION_KEY               "key"
+#define STS_ENDPOINT_AUTH_OPTION_AUD               "aud"
 
 #define STS_OAUTH_CLIENT_ID                        "client_id"
 #define STS_OAUTH_CLIENT_SECRET                    "client_secret"

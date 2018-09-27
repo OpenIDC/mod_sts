@@ -1,4 +1,8 @@
 9/27/2018
+- support client_secret_jwt authentication method for ropc/otx
+- version 0.7.0
+
+9/27/2018
 - split out exchange protocol functions in separate files
 - version 0.6.0
 

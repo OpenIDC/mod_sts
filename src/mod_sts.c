@@ -53,6 +53,8 @@
 // TOOD: ws-trust source tokens can only be presented as BinarySecurityToken's; should we support native SAML 2.0 etc.?
 #include "mod_sts.h"
 
+#include <cjose/cjose.h>
+
 module AP_MODULE_DECLARE_DATA sts_module;
 
 #define STS_CONFIG_DEFAULT_CACHE_SHM_SIZE          2048
@@ -353,6 +355,7 @@ static const char *sts_set_ropc_endpoint_auth(cmd_parms *cmd, void *m,
 	static char *methods[] = {
 			STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR,
 			STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR,
+			STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR,
 			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
 			NULL };
 	return sts_set_method_options(cmd, arg, methods,
@@ -367,6 +370,7 @@ static const char *sts_set_oauth_tx_endpoint_auth(cmd_parms *cmd, void *m,
 	static char *methods[] = {
 			STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR,
 			STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR,
+			STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR,
 			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
 			NULL };
 	return sts_set_method_options(cmd, arg, methods,
@@ -780,11 +784,106 @@ apr_byte_t sts_get_endpoint_auth_cert_key(request_rec *r, apr_hash_t *options,
 	return TRUE;
 }
 
+#define STS_JOSE_HDR_TYP                           "typ"
+#define STS_JOSE_HDR_TYP_JWT                       "JWT"
+#define STS_OAUTH_CLAIM_ISS                        "iss"
+#define STS_OAUTH_CLAIM_SUB                        "sub"
+#define STS_OAUTH_CLAIM_JTI                        "jti"
+#define STS_OAUTH_CLAIM_EXP                        "exp"
+#define STS_OAUTH_CLAIM_AUD                        "aud"
+#define STS_OAUTH_CLAIM_IAT                        "iat"
+#define STS_OAUTH_CLIENT_ASSERTION                 "client_assertion"
+#define STS_OAUTH_CLIENT_ASSERTION_TYPE            "client_assertion_type"
+#define STS_OAUTH_CLIENT_ASSERTION_TYPE_JWT_BEARER "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+
+static apr_byte_t sts_add_auth_client_secret_jwt(request_rec *r,
+		const char *client_id, const char *client_secret, const char *audience,
+		apr_table_t *params) {
+
+	// TODO: error handling/printing
+
+	apr_byte_t rc = FALSE;
+	const char *jwt = NULL;
+
+	sts_debug(r, "enter");
+
+	json_t *payload = NULL;
+	cjose_header_t *hdr = NULL;
+	cjose_jws_t *jws = NULL;
+	cjose_jwk_t *jwk = NULL;
+	cjose_err err;
+
+	payload = json_object();
+	// TODO: generate random string
+	char *jti = "abacadabra";
+	json_object_set_new(payload, STS_OAUTH_CLAIM_JTI, json_string(jti));
+	json_object_set_new(payload, STS_OAUTH_CLAIM_ISS, json_string(client_id));
+	json_object_set_new(payload, STS_OAUTH_CLAIM_SUB, json_string(client_id));
+	json_object_set_new(payload, STS_OAUTH_CLAIM_AUD, json_string(audience));
+	json_object_set_new(payload, STS_OAUTH_CLAIM_EXP,
+			json_integer(apr_time_sec(apr_time_now()) + 60));
+	json_object_set_new(payload, STS_OAUTH_CLAIM_IAT,
+			json_integer(apr_time_sec(apr_time_now())));
+
+	jwk = cjose_jwk_create_oct_spec((const unsigned char *) client_secret,
+			strlen(client_secret), &err);
+	if (jwk == NULL) {
+		sts_error(r, "cjose_jwk_create_oct_spec failed");
+		goto out;
+	}
+
+	hdr = cjose_header_new(&err);
+	if (hdr == NULL) {
+		sts_error(r, "cjose_header_new failed");
+		goto out;
+	}
+
+	cjose_header_set(hdr, CJOSE_HDR_ALG, CJOSE_HDR_ALG_HS256, &err);
+	cjose_header_set(hdr, STS_JOSE_HDR_TYP, STS_JOSE_HDR_TYP_JWT, &err);
+
+	char *s_payload = json_dumps(payload,
+			JSON_PRESERVE_ORDER | JSON_COMPACT);
+	jws = cjose_jws_sign(jwk, hdr, (const uint8_t *) s_payload,
+			strlen(s_payload), &err);
+	free(s_payload);
+
+	if (jws == NULL) {
+		sts_error(r, "cjose_jws_sign failed");
+		goto out;
+	}
+
+	if (cjose_jws_export(jws, &jwt, &err) == FALSE) {
+		sts_error(r, "cjose_jws_export failed");
+		goto out;
+	}
+
+	apr_table_setn(params, STS_OAUTH_CLIENT_ASSERTION_TYPE,
+			STS_OAUTH_CLIENT_ASSERTION_TYPE_JWT_BEARER);
+	apr_table_set(params, STS_OAUTH_CLIENT_ASSERTION, jwt);
+
+	rc = TRUE;
+
+	out:
+
+	if (payload)
+		json_decref(payload);
+	if (hdr)
+		cjose_header_release(hdr);
+	if (jws)
+		cjose_jws_release(jws);
+	if (jwk)
+		cjose_jwk_release(jwk);
+	return rc;
+}
+
 apr_byte_t sts_get_oauth_endpoint_auth(request_rec *r, int auth,
 		apr_hash_t *auth_options, apr_table_t *params, const char *client_id,
 		char **basic_auth, const char **client_cert, const char **client_key) {
+
 	if (auth != STS_ENDPOINT_AUTH_NONE) {
+
 		if (auth == STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) {
+
 			if (client_id == NULL) {
 				sts_error(r,
 						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR "\" the client_id must be set the configuration.");
@@ -799,8 +898,11 @@ apr_byte_t sts_get_oauth_endpoint_auth(request_rec *r, int auth,
 						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_SECRET "\" option must be set on the configuration directive");
 				return FALSE;
 			}
+
 			*basic_auth = apr_psprintf(r->pool, "%s:%s", client_id, secret);
+
 		} else if (auth == STS_ENDPOINT_AUTH_CLIENT_SECRET_POST) {
+
 			if (client_id == NULL) {
 				sts_error(r,
 						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR "\" the client_id must be set the configuration.");
@@ -816,12 +918,47 @@ apr_byte_t sts_get_oauth_endpoint_auth(request_rec *r, int auth,
 						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_SECRET "\" option must be set on the configuration directive");
 				return FALSE;
 			}
+
 			apr_table_set(params, STS_OAUTH_CLIENT_ID, client_id);
 			apr_table_set(params, STS_OAUTH_CLIENT_SECRET, client_secret);
+
 		} else if (auth == STS_ENDPOINT_AUTH_CLIENT_CERT) {
+
 			if (sts_get_endpoint_auth_cert_key(r, auth_options, client_cert,
 					client_key) == FALSE)
 				return FALSE;
+
+		} else if (auth == STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT) {
+
+			if (client_id == NULL) {
+				sts_error(r,
+						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR "\" the client_id must be set the configuration.");
+				return FALSE;
+			}
+			const char *client_secret = sts_get_config_method_option(r,
+					auth_options,
+					STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR,
+					STS_ENDPOINT_AUTH_OPTION_SECRET,
+					NULL);
+			if (client_secret == NULL) {
+				sts_error(r,
+						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_SECRET "\" option must be set on the configuration directive");
+				return FALSE;
+			}
+			const char *aud = sts_get_config_method_option(r, auth_options,
+					STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR,
+					STS_ENDPOINT_AUTH_OPTION_AUD,
+					NULL);
+			if (aud == NULL) {
+				sts_error(r,
+						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_AUD "\" option must be set on the configuration directive");
+				return FALSE;
+			}
+
+			if (sts_add_auth_client_secret_jwt(r, client_id, client_secret, aud,
+					params) == FALSE)
+				return FALSE;
+
 		}
 	}
 	return TRUE;

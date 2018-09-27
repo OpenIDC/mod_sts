@@ -1,4 +1,4 @@
-AC_INIT([mod_sts],[0.6.0],[hans.zandbelt@zmartzone.eu])
+AC_INIT([mod_sts],[0.7.0],[hans.zandbelt@zmartzone.eu])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -58,6 +58,10 @@ AC_SUBST(APR_LIBS)
 PKG_CHECK_MODULES(JANSSON, jansson)
 AC_SUBST(JANSSON_CFLAGS)
 AC_SUBST(JANSSON_LIBS)
+
+PKG_CHECK_MODULES(CJOSE, cjose)
+AC_SUBST(CJOSE_CFLAGS)
+AC_SUBST(CJOSE_LIBS)
 
 # Create Makefile from Makefile.in
 AC_CONFIG_FILES([Makefile])
