@@ -1,4 +1,8 @@
 9/27/2018
+- support client authentication methods: basic, post, client cert
+- version 0.5.1
+
+9/27/2018
 - support multiple target token representations
 - support multiple named options in source and target tokens
 - adapt README.md to generic tokens

@@ -88,22 +88,30 @@ APLOG_USE_MODULE(sts);
 #define STS_HEADER_AUTHORIZATION                "Authorization"
 
 #define STS_CONTENT_TYPE_FORM_ENCODED           "application/x-www-form-urlencoded"
+#define STS_CONTENT_TYPE_SOAP_UTF8              "application/soap+xml; charset=utf-8"
 
 typedef struct {
 	int mode;
 	int ssl_validation;
 	int http_timeout;
 
-	char *wstrust_sts_url;
+	char *wstrust_endpoint;
+	int wstrust_endpoint_auth;
+	apr_hash_t *wstrust_endpoint_auth_options;
 	char *wstrust_applies_to;
 	char *wstrust_token_type;
 	char *wstrust_value_type;
 
-	char *ropc_token_endpoint;
+	char *ropc_endpoint;
+	int ropc_endpoint_auth;
+	apr_hash_t *ropc_endpoint_auth_options;
 	char *ropc_client_id;
 	char *ropc_username;
 
-	char *oauth_token_exchange_endpoint;
+	char *oauth_tx_endpoint;
+	int oauth_tx_endpoint_auth;
+	apr_hash_t *oauth_tx_endpoint_auth_options;
+	char *oauth_tx_client_id;
 
 	void *cache_cfg;
 	int cache_shm_size_max;
@@ -124,7 +132,7 @@ void *sts_create_server_config(apr_pool_t *pool, server_rec *svr);
 void *sts_create_dir_config(apr_pool_t *pool, char *path);
 
 apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
-		const char *basic_auth, int ssl_validate_server, char **response);
+		char **rtoken);
 
 int sts_cache_shm_post_config(server_rec *s);
 int sts_cache_shm_child_init(apr_pool_t *p, server_rec *s);

@@ -88,6 +88,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	sts_module.module_index = 0;
 	sts_server_config *cfg = sts_create_server_config(request->pool,
 			request->server);
+	cfg->ssl_validation = 0;
 	//cfg->mode = 1;
 
 	sts_dir_config *d_cfg = sts_create_dir_config(request->pool, NULL);
@@ -123,8 +124,8 @@ int main(int argc, char **argv, char **env) {
 	char *token = argv[1];
 	char *response = NULL;
 
-	apr_byte_t result = sts_util_http_token_exchange(r, token, NULL, 0,
-			&response);
+	apr_byte_t result = sts_util_http_token_exchange(r, token, &response);
+
 	if (result == TRUE) {
 		printf("Success: %s\n", response);
 	} else {

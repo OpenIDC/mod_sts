@@ -177,9 +177,9 @@ apr_byte_t sts_util_http_call(request_rec *r, const char *url, const char *data,
 
 	/* do some logging about the inputs */
 	sts_debug(r,
-			"url=%s, data=%s, content_type=%s, soap_action=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d",
+			"url=%s, data=%s, content_type=%s, basic_auth=%s, soap_action=%s, ssl_validate_server=%d, timeout=%d ssl_cert=%s, ssl_key=%s",
 			url, data, content_type, basic_auth, soap_action,
-			ssl_validate_server, timeout);
+			ssl_validate_server, timeout, ssl_cert, ssl_key);
 
 	curl = curl_easy_init();
 	if (curl == NULL) {

@@ -43,11 +43,11 @@
  *
  **************************************************************************/
 
+// TODO: add client_secret_jwt and private_key_jwt to the auth options of the OAuth-based STS methods
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
 // TODO: strip the source token from the propagated request? (optionally?)
 //       FWIW: the authorization header will be overwritten
-// TODO: client authentication options for all(!) STS methods
 #include <httpd.h>
 #include <http_config.h>
 #include <http_request.h>
@@ -71,7 +71,22 @@ module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_CONFIG_POS_INT_UNSET                   -1
 #define STS_CONFIG_DEFAULT_ENABLED                 1
 
-#define STS_CONFIG_DEFAULT_WSTRUST_STS_URL         "https://localhost:9031/pf/sts.wst"
+static const int STS_ENDPOINT_AUTH_NONE = 0;
+#define STS_ENDPOINT_AUTH_BASIC_STR                      "basic"
+static const int STS_ENDPOINT_AUTH_BASIC = 1;
+#define STS_ENDPOINT_AUTH_CLIENT_CERT_STR                "client_cert"
+static const int STS_ENDPOINT_AUTH_CLIENT_CERT = 2;
+#define STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR        "client_secret_basic"
+static const int STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC = 3;
+#define STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR         "client_secret_post"
+static const int STS_ENDPOINT_AUTH_CLIENT_SECRET_POST = 4;
+#define STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR          "client_secret_jwt"
+static const int STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT = 5;
+#define STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT_STR            "private_key_jwt"
+static const int STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT = 6;
+
+#define STS_CONFIG_DEFAULT_WSTRUST_ENDPOINT        "https://localhost:9031/pf/sts.wst"
+#define STS_CONFIG_DEFAULT_WSTRUST_ENDPOINT_AUTH   STS_ENDPOINT_AUTH_NONE
 #define STS_CONFIG_DEFAULT_WSTRUST_APPLIES_TO      "localhost:default:entityId"
 #define STS_CONFIG_DEFAULT_WSTRUST_TOKEN_TYPE      "urn:bogus:token"
 //#define STS_CONFIG_DEFAULT_WSTRUST_TOKEN_TYPE      "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0"
@@ -81,11 +96,14 @@ module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_CONFIG_DEFAULT_WSTRUST_REQUEST_TYPE    "http://docs.oasis-open.org/ws-sx/ws-trust/200512/Issue"
 #define STS_CONFIG_DEFAULT_WSTRUST_KEY_TYPE        "http://docs.oasis-open.org/ws-sx/ws-trust/200512/SymmetricKey"
 
-#define STS_CONFIG_DEFAULT_ROPC_TOKEN_ENDPOINT     "https://localhost:9031/as/token.oauth2"
+#define STS_CONFIG_DEFAULT_ROPC_ENDPOINT           "https://localhost:9031/as/token.oauth2"
+#define STS_CONFIG_DEFAULT_ROPC_ENDPOINT_AUTH      STS_ENDPOINT_AUTH_NONE
 #define STS_CONFIG_DEFAULT_ROPC_CLIENT_ID          "mod_sts"
 #define STS_CONFIG_DEFAULT_ROPC_USERNAME           NULL
 
 #define STS_CONFIG_DEFAULT_OAUTH_TX_ENDPOINT       "https://localhost:9031/as/token.oauth2"
+#define STS_CONFIG_DEFAULT_OAUTH_TX_ENDPOINT_AUTH  STS_ENDPOINT_AUTH_NONE
+#define STS_CONFIG_DEFAULT_OAUTH_TX_CLIENT_ID      "mod_sts"
 
 #define STS_CONFIG_DEFAULT_CACHE_SHM_SIZE          2048
 #define STS_CONFIG_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 4096 + 512 + 17
@@ -107,20 +125,21 @@ module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_CONFIG_DEFAULT_HTTP_TIMEOUT            20
 
 #define STS_CONFIG_TOKEN_ENVVAR_STR                "environment"
-static const int STS_CONFIG_TOKEN_ENVVAR         = 1;
+static const int STS_CONFIG_TOKEN_ENVVAR = 1;
 #define STS_CONFIG_TOKEN_HEADER_STR                "header"
-static const int STS_CONFIG_TOKEN_HEADER         = 2;
+static const int STS_CONFIG_TOKEN_HEADER = 2;
 #define STS_CONFIG_TOKEN_QUERY_STR                 "query"
-static const int STS_CONFIG_TOKEN_QUERY          = 4;
+static const int STS_CONFIG_TOKEN_QUERY = 4;
 #define STS_CONFIG_TOKEN_COOKIE_STR                "cookie"
-static const int STS_CONFIG_TOKEN_COOKIE         = 8;
+static const int STS_CONFIG_TOKEN_COOKIE = 8;
 
 #define STS_DEFAULT_ACCEPT_SOURCE_TOKEN_IN         (STS_CONFIG_TOKEN_ENVVAR | STS_CONFIG_TOKEN_HEADER)
 #define STS_DEFAULT_SET_TARGET_TOKEN_IN            (STS_CONFIG_TOKEN_ENVVAR | STS_CONFIG_TOKEN_COOKIE)
 
 #define STS_HEADER_AUTHORIZATION_BEARER            "Bearer"
 
-#define STS_CONFIG_TOKEN_OPTION_SEPARATOR          ":"
+#define STS_CONFIG_OPTION_SEPARATOR                ":"
+
 #define STS_CONFIG_TOKEN_OPTION_NAME               "name"
 #define STS_CONFIG_TOKEN_OPTION_TYPE               "type"
 
@@ -136,11 +155,16 @@ static const int STS_CONFIG_TOKEN_COOKIE         = 8;
 #define STS_TARGET_TOKEN_HEADER_NAME_DEFAULT       STS_HEADER_AUTHORIZATION
 #define STS_TARGET_TOKEN_HEADER_TYPE_DEFAULT       STS_HEADER_AUTHORIZATION_BEARER
 
-#define STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC      "client_secret_basic"
-#define STS_ENDPOINT_AUTH_CLIENT_SECRET_POST       "client_secret_post"
-#define STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT        "client_secret_jwt"
-#define STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT          "private_key_jwt"
-#define STS_ENDPOINT_AUTH_CLIENT_CERT              "client_cert"
+#define STS_ENDPOINT_AUTH_OPTION_USERNAME          "username"
+#define STS_ENDPOINT_AUTH_OPTION_PASSWORD          "password"
+#define STS_ENDPOINT_AUTH_OPTION_SECRET            "secret"
+#define STS_ENDPOINT_AUTH_OPTION_CERT              "cert"
+#define STS_ENDPOINT_AUTH_OPTION_KEY               "key"
+
+#define STS_OAUTH_CLIENT_ID                        "client_id"
+#define STS_OAUTH_CLIENT_SECRET                    "client_secret"
+#define STS_OAUTH_GRANT_TYPE                       "grant_type"
+#define STS_OAUTH_ACCESS_TOKEN                     "access_token"
 
 static apr_status_t sts_cleanup_handler(void *data) {
 	server_rec *s = (server_rec *) data;
@@ -221,8 +245,8 @@ static const char *sts_set_mode(cmd_parms *cmd, void *m, const char *arg) {
 	return "Invalid value: must be \"" STS_CONFIG_MODE_WSTRUST_STR "\", \"" STS_CONFIG_MODE_ROPC_STR "\" or \"" STS_CONFIG_MODE_OAUTH_TX_STR "\"";
 }
 
-static void sts_set_config_token_options(cmd_parms *cmd,
-		apr_hash_t **config_token_options, const char *type, char *options) {
+static void sts_set_config_method_options(cmd_parms *cmd,
+		apr_hash_t **method_options, const char *type, char *options) {
 	if (options != NULL) {
 		apr_table_t *params = apr_table_make(cmd->pool, 8);
 		sts_util_read_form_encoded_params(cmd->pool, params, options);
@@ -230,14 +254,15 @@ static void sts_set_config_token_options(cmd_parms *cmd,
 		sts_sdebug(cmd->server, "parsed: %d bytes into %d elements",
 				(int )strlen(options), apr_table_elts(params)->nelts);
 
-		if (*config_token_options == NULL)
-			*config_token_options = apr_hash_make(cmd->pool);
-		apr_hash_set(*config_token_options, type,
+		if (*method_options == NULL)
+			*method_options = apr_hash_make(cmd->pool);
+		apr_hash_set(*method_options, type,
 				APR_HASH_KEY_STRING, params);
 	}
 }
 
-static apr_hash_t *sts_get_allowed_methods(apr_pool_t *pool, char *allowed[]) {
+static apr_hash_t *sts_get_allowed_token_options(apr_pool_t *pool,
+		char *allowed[]) {
 	apr_hash_t *methods = apr_hash_make(pool);
 	int i = 0;
 	while (allowed[i] != NULL) {
@@ -261,14 +286,52 @@ static apr_hash_t *sts_get_allowed_methods(apr_pool_t *pool, char *allowed[]) {
 	return methods;
 }
 
-static const char *sts_set_token_in(cmd_parms *cmd, const char *arg,
-		char *allowed[], int *config_token, apr_hash_t **config_token_options) {
+static apr_hash_t *sts_get_allowed_endpoint_auth_methods(apr_pool_t *pool,
+		char *allowed[]) {
+	apr_hash_t *methods = apr_hash_make(pool);
+	int i = 0;
+	while (allowed[i] != NULL) {
+		if (apr_strnatcmp(STS_ENDPOINT_AUTH_BASIC_STR, allowed[i]) == 0) {
+			apr_hash_set(methods, STS_ENDPOINT_AUTH_BASIC_STR,
+					APR_HASH_KEY_STRING, &STS_ENDPOINT_AUTH_BASIC);
+		} else if (apr_strnatcmp(STS_ENDPOINT_AUTH_CLIENT_CERT_STR, allowed[i])
+				== 0) {
+			apr_hash_set(methods, STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
+					APR_HASH_KEY_STRING, &STS_ENDPOINT_AUTH_CLIENT_CERT);
+		} else if (apr_strnatcmp(STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR,
+				allowed[i]) == 0) {
+			apr_hash_set(methods, STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR,
+					APR_HASH_KEY_STRING, &STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC);
+		} else if (apr_strnatcmp(STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR,
+				allowed[i]) == 0) {
+			apr_hash_set(methods, STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR,
+					APR_HASH_KEY_STRING, &STS_ENDPOINT_AUTH_CLIENT_SECRET_POST);
+		} else if (apr_strnatcmp(STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR,
+				allowed[i]) == 0) {
+			apr_hash_set(methods, STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR,
+					APR_HASH_KEY_STRING, &STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT);
+		} else if (apr_strnatcmp(STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT_STR,
+				allowed[i]) == 0) {
+			apr_hash_set(methods, STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT_STR,
+					APR_HASH_KEY_STRING, &STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT);
+		}
+		i++;
+	}
+	return methods;
+}
+
+typedef apr_hash_t *(*sts_allowed_methods_function_t)(apr_pool_t *pool,
+		char *allowed[]);
+
+static const char *sts_set_method_options(cmd_parms *cmd, const char *arg,
+		char *allowed[], sts_allowed_methods_function_t sts_get_allowed_methods,
+		int *rmethod, apr_hash_t **rmethod_options) {
 	char *rv = NULL;
 	int i = 0;
 	apr_hash_t *allowed_methods = sts_get_allowed_methods(cmd->pool, allowed);
 
 	const char *method = apr_pstrdup(cmd->pool, arg);
-	char *option = strstr(method, STS_CONFIG_TOKEN_OPTION_SEPARATOR);
+	char *option = strstr(method, STS_CONFIG_OPTION_SEPARATOR);
 	if (option != NULL) {
 		*option = '\0';
 		option++;
@@ -276,11 +339,11 @@ static const char *sts_set_token_in(cmd_parms *cmd, const char *arg,
 
 	int *vp = apr_hash_get(allowed_methods, method, APR_HASH_KEY_STRING);
 	if (vp != NULL) {
-		if (*config_token == STS_CONFIG_POS_INT_UNSET)
-			(*config_token) = (*vp);
+		if (*rmethod == STS_CONFIG_POS_INT_UNSET)
+			(*rmethod) = (*vp);
 		else
-			(*config_token) |= (*vp);
-		sts_set_config_token_options(cmd, config_token_options, method, option);
+			(*rmethod) |= (*vp);
+		sts_set_config_method_options(cmd, rmethod_options, method, option);
 		return NULL;
 	}
 
@@ -304,7 +367,8 @@ static const char *sts_set_accept_source_token_in(cmd_parms *cmd, void *m,
 			STS_CONFIG_TOKEN_QUERY_STR,
 			STS_CONFIG_TOKEN_COOKIE_STR,
 			NULL };
-	return sts_set_token_in(cmd, arg, options, &dir_cfg->accept_source_token_in,
+	return sts_set_method_options(cmd, arg, options,
+			sts_get_allowed_token_options, &dir_cfg->accept_source_token_in,
 			&dir_cfg->accept_source_token_in_options);
 }
 
@@ -317,8 +381,50 @@ static const char *sts_set_set_target_token_in(cmd_parms *cmd, void *m,
 			STS_CONFIG_TOKEN_QUERY_STR,
 			STS_CONFIG_TOKEN_COOKIE_STR,
 			NULL };
-	return sts_set_token_in(cmd, arg, options, &dir_cfg->set_target_token_in,
+	return sts_set_method_options(cmd, arg, options,
+			sts_get_allowed_token_options, &dir_cfg->set_target_token_in,
 			&dir_cfg->set_target_token_in_options);
+}
+
+static const char *sts_set_wstrust_endpoint_auth(cmd_parms *cmd, void *m,
+		const char *arg) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			cmd->server->module_config, &sts_module);
+	static char *methods[] = {
+			STS_ENDPOINT_AUTH_BASIC_STR,
+			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
+			NULL };
+	return sts_set_method_options(cmd, arg, methods,
+			sts_get_allowed_endpoint_auth_methods, &cfg->wstrust_endpoint_auth,
+			&cfg->wstrust_endpoint_auth_options);
+}
+
+static const char *sts_set_ropc_endpoint_auth(cmd_parms *cmd, void *m,
+		const char *arg) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			cmd->server->module_config, &sts_module);
+	static char *methods[] = {
+			STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR,
+			STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR,
+			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
+			NULL };
+	return sts_set_method_options(cmd, arg, methods,
+			sts_get_allowed_endpoint_auth_methods, &cfg->ropc_endpoint_auth,
+			&cfg->ropc_endpoint_auth_options);
+}
+
+static const char *sts_set_oauth_tx_endpoint_auth(cmd_parms *cmd, void *m,
+		const char *arg) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			cmd->server->module_config, &sts_module);
+	static char *methods[] = {
+			STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR,
+			STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR,
+			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
+			NULL };
+	return sts_set_method_options(cmd, arg, methods,
+			sts_get_allowed_endpoint_auth_methods, &cfg->oauth_tx_endpoint_auth,
+			&cfg->oauth_tx_endpoint_auth_options);
 }
 
 static int sts_get_http_timeout(request_rec *r) {
@@ -329,12 +435,20 @@ static int sts_get_http_timeout(request_rec *r) {
 	return cfg->http_timeout;
 }
 
-static const char * sts_get_wstrust_sts_url(request_rec *r) {
+static const char * sts_get_wstrust_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (cfg->wstrust_sts_url == NULL)
-		return STS_CONFIG_DEFAULT_WSTRUST_STS_URL;
-	return cfg->wstrust_sts_url;
+	if (cfg->wstrust_endpoint == NULL)
+		return STS_CONFIG_DEFAULT_WSTRUST_ENDPOINT;
+	return cfg->wstrust_endpoint;
+}
+
+static int sts_get_wstrust_endpoint_auth(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->wstrust_endpoint_auth == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_WSTRUST_ENDPOINT_AUTH;
+	return cfg->wstrust_endpoint_auth;
 }
 
 static const char * sts_get_wstrust_applies_to(request_rec *r) {
@@ -361,12 +475,20 @@ static const char * sts_get_wstrust_value_type(request_rec *r) {
 	return cfg->wstrust_value_type;
 }
 
-static const char * sts_get_ropc_token_endpoint(request_rec *r) {
+static const char * sts_get_ropc_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (cfg->ropc_token_endpoint == NULL)
-		return STS_CONFIG_DEFAULT_ROPC_TOKEN_ENDPOINT;
-	return cfg->ropc_token_endpoint;
+	if (cfg->ropc_endpoint == NULL)
+		return STS_CONFIG_DEFAULT_ROPC_ENDPOINT;
+	return cfg->ropc_endpoint;
+}
+
+static int sts_get_ropc_endpoint_auth(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->ropc_endpoint_auth == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_ROPC_ENDPOINT_AUTH;
+	return cfg->ropc_endpoint_auth;
 }
 
 static const char * sts_get_ropc_client_id(request_rec *r) {
@@ -386,12 +508,28 @@ static const char * sts_get_ropc_username(request_rec *r) {
 	return cfg->ropc_username;
 }
 
-static const char * sts_get_oauth_token_exchange_endpoint(request_rec *r) {
+static const char * sts_get_oauth_tx_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (cfg->oauth_token_exchange_endpoint == NULL)
+	if (cfg->oauth_tx_endpoint == NULL)
 		return STS_CONFIG_DEFAULT_OAUTH_TX_ENDPOINT;
-	return cfg->oauth_token_exchange_endpoint;
+	return cfg->oauth_tx_endpoint;
+}
+
+static int sts_get_oauth_tx_endpoint_auth(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->oauth_tx_endpoint_auth == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_OAUTH_TX_ENDPOINT_AUTH;
+	return cfg->oauth_tx_endpoint_auth;
+}
+
+static const char * sts_get_oauth_tx_client_id(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->oauth_tx_client_id == NULL)
+		return STS_CONFIG_DEFAULT_OAUTH_TX_CLIENT_ID;
+	return cfg->oauth_tx_client_id;
 }
 
 static int sts_get_enabled(request_rec *r) {
@@ -449,13 +587,13 @@ static const char * sts_get_resource(request_rec *r) {
 	return dir_cfg->resource;
 }
 
-static const char *sts_get_config_token_option(request_rec *r,
-		apr_hash_t *config_token_options, const char *type, const char *key,
+static const char *sts_get_config_method_option(request_rec *r,
+		apr_hash_t *config_method_options, const char *type, const char *key,
 		char *default_value) {
 	const char *rv = NULL;
-	if (config_token_options != NULL) {
+	if (config_method_options != NULL) {
 		apr_table_t *options = (apr_table_t *) apr_hash_get(
-				config_token_options, type,
+				config_method_options, type,
 				APR_HASH_KEY_STRING);
 		if (options != NULL)
 			rv = apr_table_get(options, key);
@@ -473,7 +611,7 @@ static char *sts_get_source_token_from_envvar(request_rec *r) {
 
 	sts_debug(r, "enter");
 
-	const char *envvar_name = sts_get_config_token_option(r,
+	const char *envvar_name = sts_get_config_method_option(r,
 			dir_cfg->accept_source_token_in_options,
 			STS_CONFIG_TOKEN_ENVVAR_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
@@ -495,12 +633,12 @@ static char *sts_get_source_token_from_header(request_rec *r) {
 
 	sts_debug(r, "enter");
 
-	const char *name = sts_get_config_token_option(r,
+	const char *name = sts_get_config_method_option(r,
 			dir_cfg->accept_source_token_in_options,
 			STS_CONFIG_TOKEN_HEADER_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
 			STS_SOURCE_TOKEN_HEADER_NAME_DEFAULT);
-	const char *type = sts_get_config_token_option(r,
+	const char *type = sts_get_config_method_option(r,
 			dir_cfg->accept_source_token_in_options,
 			STS_CONFIG_TOKEN_HEADER_STR,
 			STS_CONFIG_TOKEN_OPTION_TYPE,
@@ -538,7 +676,7 @@ static char *sts_get_source_token_from_query(request_rec *r) {
 	sts_debug(r, "parsed: %d bytes into %d elements",
 			r->args ? (int )strlen(r->args) : 0, apr_table_elts(params)->nelts);
 
-	const char *query_param_name = sts_get_config_token_option(r,
+	const char *query_param_name = sts_get_config_method_option(r,
 			dir_cfg->accept_source_token_in_options,
 			STS_CONFIG_TOKEN_QUERY_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
@@ -560,7 +698,7 @@ static char *sts_get_source_token_from_cookie(request_rec *r) {
 
 	sts_debug(r, "enter");
 
-	const char *cookie_name = sts_get_config_token_option(r,
+	const char *cookie_name = sts_get_config_method_option(r,
 			dir_cfg->accept_source_token_in_options,
 			STS_CONFIG_TOKEN_COOKIE_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
@@ -609,7 +747,7 @@ static void sts_set_target_token_in_envvar(request_rec *r, char *target_token) {
 
 	sts_debug(r, "enter");
 
-	const char *envvar_name = sts_get_config_token_option(r,
+	const char *envvar_name = sts_get_config_method_option(r,
 			dir_cfg->set_target_token_in_options,
 			STS_CONFIG_TOKEN_ENVVAR_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
@@ -627,12 +765,12 @@ static void sts_set_target_token_in_header(request_rec *r, char *target_token) {
 
 	sts_debug(r, "enter");
 
-	const char *header_name = sts_get_config_token_option(r,
+	const char *header_name = sts_get_config_method_option(r,
 			dir_cfg->set_target_token_in_options,
 			STS_CONFIG_TOKEN_HEADER_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
 			STS_TARGET_TOKEN_HEADER_NAME_DEFAULT);
-	const char *header_type = sts_get_config_token_option(r,
+	const char *header_type = sts_get_config_method_option(r,
 			dir_cfg->set_target_token_in_options,
 			STS_CONFIG_TOKEN_HEADER_STR,
 			STS_CONFIG_TOKEN_OPTION_TYPE,
@@ -656,7 +794,7 @@ static void sts_set_target_token_in_query(request_rec *r, char *target_token) {
 
 	sts_debug(r, "enter");
 
-	const char *query_param_name = sts_get_config_token_option(r,
+	const char *query_param_name = sts_get_config_method_option(r,
 			dir_cfg->set_target_token_in_options,
 			STS_CONFIG_TOKEN_QUERY_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
@@ -682,7 +820,7 @@ static void sts_set_target_token_in_cookie(request_rec *r, char *target_token) {
 
 	sts_debug(r, "enter");
 
-	const char *cookie_name = sts_get_config_token_option(r,
+	const char *cookie_name = sts_get_config_method_option(r,
 			dir_cfg->set_target_token_in_options,
 			STS_CONFIG_TOKEN_COOKIE_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
@@ -734,8 +872,8 @@ static int sts_handler(request_rec *r) {
 
 	if (target_token == NULL) {
 		sts_debug(r, "cache miss");
-		if (sts_util_http_token_exchange(r, source_token, NULL,
-				sts_get_ssl_validation(r), &target_token) == FALSE) {
+		if (sts_util_http_token_exchange(r, source_token,
+				&target_token) == FALSE) {
 			sts_error(r, "sts_util_http_token_exchange failed");
 			return HTTP_UNAUTHORIZED;
 		}
@@ -880,10 +1018,37 @@ const char *xpath_expr_template = "/s:Envelope"
 		"/wst:RequestedSecurityToken"
 		"/wsse:BinarySecurityToken[@ValueType='%s']";
 
+static apr_byte_t sts_get_endpoint_auth_cert_key(request_rec *r,
+		apr_hash_t *options, const char **client_cert, const char **client_key) {
+	*client_cert = sts_get_config_method_option(r, options,
+			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
+			STS_ENDPOINT_AUTH_OPTION_CERT,
+			NULL);
+	*client_key = sts_get_config_method_option(r, options,
+			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
+			STS_ENDPOINT_AUTH_OPTION_KEY,
+			NULL);
+	if (*client_cert == NULL) {
+		sts_error(r,
+				"when using \"" STS_ENDPOINT_AUTH_CLIENT_CERT_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_CERT "\" option must be set on the configuration directive");
+		return FALSE;
+	}
+	if (*client_key == NULL) {
+		sts_error(r,
+				"when using \"" STS_ENDPOINT_AUTH_CLIENT_CERT_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_KEY "\" option must be set on the configuration directive");
+		return FALSE;
+	}
+	return TRUE;
+}
+
 static apr_byte_t sts_exec_wstrust(request_rec *r, const char *token,
-		const char *basic_auth, int ssl_validate_server, char **rtoken) {
+		char **rtoken) {
 
 	char *response = NULL;
+	const char *basic_auth = NULL;
+	const char *client_cert = NULL;
+	const char *client_key = NULL;
+
 	sts_debug(r, "enter");
 
 	const char *id1 = "_0";
@@ -908,18 +1073,50 @@ static apr_byte_t sts_exec_wstrust(request_rec *r, const char *token,
 
 	char *data = apr_psprintf(r->pool, ws_trust_soap_call_template, id1,
 			created, expires, id2, sts_get_wstrust_value_type(r), b64,
-			sts_get_wstrust_sts_url(r), STS_CONFIG_DEFAULT_WSTRUST_ACTION,
+			sts_get_wstrust_endpoint(r), STS_CONFIG_DEFAULT_WSTRUST_ACTION,
 			sts_get_wstrust_token_type(r),
 			STS_CONFIG_DEFAULT_WSTRUST_REQUEST_TYPE,
 			sts_get_wstrust_applies_to(r),
 			STS_CONFIG_DEFAULT_WSTRUST_KEY_TYPE);
 
-	if (sts_util_http_call(r, sts_get_wstrust_sts_url(r), data,
-			"application/soap+xml; charset=utf-8", basic_auth,
-			sts_get_wstrust_sts_url(r), ssl_validate_server, &response,
-			sts_get_http_timeout(r),
-			NULL,
-			NULL, NULL) == FALSE) {
+	int auth = sts_get_wstrust_endpoint_auth(r);
+	if (auth != STS_ENDPOINT_AUTH_NONE) {
+		sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+				r->server->module_config, &sts_module);
+		if (auth == STS_ENDPOINT_AUTH_BASIC) {
+			const char *username = sts_get_config_method_option(r,
+					cfg->wstrust_endpoint_auth_options,
+					STS_ENDPOINT_AUTH_BASIC_STR,
+					STS_ENDPOINT_AUTH_OPTION_USERNAME,
+					NULL);
+			const char *password = sts_get_config_method_option(r,
+					cfg->wstrust_endpoint_auth_options,
+					STS_ENDPOINT_AUTH_BASIC_STR,
+					STS_ENDPOINT_AUTH_OPTION_PASSWORD,
+					NULL);
+			if (username == NULL) {
+				sts_error(r,
+						"when using \"" STS_ENDPOINT_AUTH_BASIC_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_USERNAME "\" option must be set on the configuration directive");
+				return FALSE;
+			}
+			if (password == NULL) {
+				sts_error(r,
+						"when using \"" STS_ENDPOINT_AUTH_BASIC_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_PASSWORD "\" option must be set on the configuration directive");
+				return FALSE;
+			}
+			basic_auth = apr_psprintf(r->pool, "%s:%s", username, password);
+		} else if (auth == STS_ENDPOINT_AUTH_CLIENT_CERT) {
+			if (sts_get_endpoint_auth_cert_key(r,
+					cfg->wstrust_endpoint_auth_options, &client_cert,
+					&client_key) == FALSE)
+				return FALSE;
+		}
+	}
+
+	if (sts_util_http_call(r, sts_get_wstrust_endpoint(r), data,
+			STS_CONTENT_TYPE_SOAP_UTF8, basic_auth, sts_get_wstrust_endpoint(r),
+			sts_get_ssl_validation(r), &response, sts_get_http_timeout(r),
+			NULL, client_cert, client_key) == FALSE) {
 		sts_error(r, "sts_util_http_call failed!");
 		return FALSE;
 	}
@@ -941,35 +1138,87 @@ static apr_byte_t sts_exec_wstrust(request_rec *r, const char *token,
 	return TRUE;
 }
 
-#define STS_ROPC_GRANT_TYPE_NAME  "grant_type"
 #define STS_ROPC_GRANT_TYPE_VALUE "password"
-#define STS_ROPC_CLIENT_ID        "client_id"
 #define STS_ROPC_USERNAME         "username"
 #define STS_ROPC_PASSWORD         "password"
-#define STS_ROPC_ACCESS_TOKEN     "access_token"
+
+static apr_byte_t sts_get_oauth_endpoint_auth(request_rec *r, int auth,
+		apr_hash_t *auth_options, apr_table_t *params, const char *client_id,
+		char **basic_auth, const char **client_cert, const char **client_key) {
+	if (auth != STS_ENDPOINT_AUTH_NONE) {
+		if (auth == STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) {
+			if (client_id == NULL) {
+				sts_error(r,
+						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR "\" the client_id must be set the configuration.");
+				return FALSE;
+			}
+			const char *secret = sts_get_config_method_option(r, auth_options,
+					STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR,
+					STS_ENDPOINT_AUTH_OPTION_SECRET,
+					NULL);
+			if (secret == NULL) {
+				sts_error(r,
+						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_SECRET "\" option must be set on the configuration directive");
+				return FALSE;
+			}
+			*basic_auth = apr_psprintf(r->pool, "%s:%s", client_id, secret);
+		} else if (auth == STS_ENDPOINT_AUTH_CLIENT_SECRET_POST) {
+			if (client_id == NULL) {
+				sts_error(r,
+						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR "\" the client_id must be set the configuration.");
+				return FALSE;
+			}
+			const char *client_secret = sts_get_config_method_option(r,
+					auth_options,
+					STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR,
+					STS_ENDPOINT_AUTH_OPTION_SECRET,
+					NULL);
+			if (client_secret == NULL) {
+				sts_error(r,
+						"when using \"" STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_SECRET "\" option must be set on the configuration directive");
+				return FALSE;
+			}
+			apr_table_set(params, STS_OAUTH_CLIENT_ID, client_id);
+			apr_table_set(params, STS_OAUTH_CLIENT_SECRET, client_secret);
+		} else if (auth == STS_ENDPOINT_AUTH_CLIENT_CERT) {
+			if (sts_get_endpoint_auth_cert_key(r, auth_options, client_cert,
+					client_key) == FALSE)
+				return FALSE;
+		}
+	}
+	return TRUE;
+}
 
 static apr_byte_t sts_exec_ropc(request_rec *r, const char *token,
-		const char *basic_auth, int ssl_validate_server, char **rtoken) {
+		char **rtoken) {
 
 	char *response = NULL;
-
+	char *basic_auth = NULL;
+	const char *client_cert = NULL, *client_key = NULL;
 	const char *client_id = sts_get_ropc_client_id(r);
 	const char *username = sts_get_ropc_username(r);
 
 	sts_debug(r, "enter");
 
-	apr_table_t *data = apr_table_make(r->pool, 4);
-	apr_table_addn(data, STS_ROPC_GRANT_TYPE_NAME, STS_ROPC_GRANT_TYPE_VALUE);
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_addn(params, STS_OAUTH_GRANT_TYPE, STS_ROPC_GRANT_TYPE_VALUE);
 	if (client_id != NULL)
-		apr_table_addn(data, STS_ROPC_CLIENT_ID, client_id);
+		// TODO: if sts_get_ropc_endpoint_auth(r) == STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC we should not really do this
+		apr_table_addn(params, STS_OAUTH_CLIENT_ID, client_id);
 	if (username != NULL)
-		apr_table_addn(data, STS_ROPC_USERNAME, username);
-	apr_table_addn(data, STS_ROPC_PASSWORD, token);
+		apr_table_addn(params, STS_ROPC_USERNAME, username);
+	apr_table_addn(params, STS_ROPC_PASSWORD, token);
 
-	if (sts_util_http_post_form(r, sts_get_ropc_token_endpoint(r), data,
-			basic_auth, ssl_validate_server, &response, sts_get_http_timeout(r),
-			NULL,
-			NULL, NULL) == FALSE) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (sts_get_oauth_endpoint_auth(r, sts_get_ropc_endpoint_auth(r),
+			cfg->ropc_endpoint_auth_options, params, client_id, &basic_auth,
+			&client_cert, &client_key) == FALSE)
+		return FALSE;
+
+	if (sts_util_http_post_form(r, sts_get_ropc_endpoint(r), params, basic_auth,
+			sts_get_ssl_validation(r), &response, sts_get_http_timeout(r),
+			NULL, client_cert, client_key) == FALSE) {
 		sts_error(r, "oidc_util_http_post_form failed!");
 		return FALSE;
 	}
@@ -979,7 +1228,7 @@ static apr_byte_t sts_exec_ropc(request_rec *r, const char *token,
 		return FALSE;
 
 	apr_byte_t rv = sts_util_json_object_get_string(r->pool, result,
-			STS_ROPC_ACCESS_TOKEN, rtoken,
+			STS_OAUTH_ACCESS_TOKEN, rtoken,
 			NULL);
 	/*
 	 char **token_type = NULL;
@@ -1016,14 +1265,17 @@ static apr_byte_t sts_exec_ropc(request_rec *r, const char *token,
 #define STS_OAUTH_TX_ACCESS_TOKEN             "access_token"
 
 static apr_byte_t sts_exec_oauth_token_exchange(request_rec *r,
-		const char *token, const char *basic_auth, int ssl_validate_server,
-		char **rtoken) {
+		const char *token, char **rtoken) {
 
 	char *response = NULL;
+	char *basic_auth = NULL;
+	const char *resource = NULL;
+	const char *client_cert = NULL, *client_key = NULL;
+	const char *client_id = sts_get_oauth_tx_client_id(r);
 
 	sts_debug(r, "enter");
 
-	const char *resource = sts_get_resource(r);
+	resource = sts_get_resource(r);
 	if (resource == NULL)
 		resource = sts_util_get_current_url(r);
 
@@ -1037,17 +1289,30 @@ static apr_byte_t sts_exec_oauth_token_exchange(request_rec *r,
 	 urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token
 	 */
 
-	apr_table_t *data = apr_table_make(r->pool, 4);
-	apr_table_addn(data, STS_OAUTH_TX_GRANT_TYPE_NAME,
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_addn(params, STS_OAUTH_TX_GRANT_TYPE_NAME,
 			STS_OAUTH_TX_GRANT_TYPE_VALUE);
 	if (strcmp(resource, "") != 0)
-		apr_table_addn(data, STS_OAUTH_TX_RESOURCE_NAME, resource);
-	apr_table_addn(data, STS_OAUTH_TX_SUBJECT_TOKEN_NAME, token);
-	apr_table_addn(data, STS_OAUTH_TX_SUBJECT_TOKEN_TYPE_NAME,
+		apr_table_addn(params, STS_OAUTH_TX_RESOURCE_NAME, resource);
+	apr_table_addn(params, STS_OAUTH_TX_SUBJECT_TOKEN_NAME, token);
+	apr_table_addn(params, STS_OAUTH_TX_SUBJECT_TOKEN_TYPE_NAME,
 			STS_OAUTH_TX_SUBJECT_TOKEN_TYPE_VALUE);
 
-	if (sts_util_http_post_form(r, sts_get_oauth_token_exchange_endpoint(r),
-			data, basic_auth, ssl_validate_server, &response,
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (sts_get_oauth_endpoint_auth(r, sts_get_oauth_tx_endpoint_auth(r),
+			cfg->oauth_tx_endpoint_auth_options, params, client_id, &basic_auth,
+			&client_cert, &client_key) == FALSE)
+		return FALSE;
+
+	int auth = sts_get_oauth_tx_endpoint_auth(r);
+	if (auth != STS_ENDPOINT_AUTH_NONE) {
+		// TODO:
+		basic_auth = NULL;
+	}
+
+	if (sts_util_http_post_form(r, sts_get_oauth_tx_endpoint(r), params,
+			basic_auth, sts_get_ssl_validation(r), &response,
 			sts_get_http_timeout(r),
 			NULL,
 			NULL, NULL) == FALSE) {
@@ -1069,16 +1334,14 @@ static apr_byte_t sts_exec_oauth_token_exchange(request_rec *r,
 }
 
 apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
-		const char *basic_auth, int ssl_validate_server, char **rtoken) {
+		char **rtoken) {
 	int mode = sts_get_mode(r);
 	if (mode == STS_CONFIG_MODE_WSTRUST)
-		return sts_exec_wstrust(r, token, basic_auth, ssl_validate_server,
-				rtoken);
+		return sts_exec_wstrust(r, token, rtoken);
 	if (mode == STS_CONFIG_MODE_ROPC)
-		return sts_exec_ropc(r, token, basic_auth, ssl_validate_server, rtoken);
+		return sts_exec_ropc(r, token, rtoken);
 	if (mode == STS_CONFIG_MODE_OAUTH_TX)
-		return sts_exec_oauth_token_exchange(r, token, basic_auth,
-				ssl_validate_server, rtoken);
+		return sts_exec_oauth_token_exchange(r, token, rtoken);
 	sts_error(r, "unknown STS mode %d", mode);
 	return FALSE;
 }
@@ -1090,16 +1353,24 @@ void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->ssl_validation = STS_CONFIG_POS_INT_UNSET;
 	c->http_timeout = STS_CONFIG_POS_INT_UNSET;
 
-	c->wstrust_sts_url = NULL;
+	c->wstrust_endpoint = NULL;
+	c->wstrust_endpoint_auth = STS_CONFIG_POS_INT_UNSET;
+	c->wstrust_endpoint_auth_options = NULL;
+
 	c->wstrust_applies_to = NULL;
 	c->wstrust_token_type = NULL;
 	c->wstrust_value_type = NULL;
 
-	c->ropc_token_endpoint = NULL;
+	c->ropc_endpoint = NULL;
+	c->ropc_endpoint_auth = STS_CONFIG_POS_INT_UNSET;
+	c->ropc_endpoint_auth_options = NULL;
 	c->ropc_client_id = NULL;
 	c->ropc_username = NULL;
 
-	c->oauth_token_exchange_endpoint = NULL;
+	c->oauth_tx_endpoint = NULL;
+	c->oauth_tx_endpoint_auth = STS_CONFIG_POS_INT_UNSET;
+	c->oauth_tx_endpoint_auth_options = NULL;
+	c->oauth_tx_client_id = NULL;
 
 	c->cache_cfg = NULL;
 	//c->cache_shm_size_max = STS_CONFIG_POS_INT_UNSET;
@@ -1122,9 +1393,16 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->http_timeout != STS_CONFIG_POS_INT_UNSET ?
 					add->http_timeout : base->http_timeout;
 
-	c->wstrust_sts_url =
-			add->wstrust_sts_url != NULL ?
-					add->wstrust_sts_url : base->wstrust_sts_url;
+	c->wstrust_endpoint =
+			add->wstrust_endpoint != NULL ?
+					add->wstrust_endpoint : base->wstrust_endpoint;
+	c->wstrust_endpoint_auth =
+			add->wstrust_endpoint_auth != STS_CONFIG_POS_INT_UNSET ?
+					add->wstrust_endpoint_auth : base->wstrust_endpoint_auth;
+	c->wstrust_endpoint_auth_options =
+			add->wstrust_endpoint_auth_options != NULL ?
+					add->wstrust_endpoint_auth_options :
+					base->wstrust_endpoint_auth_options;
 	c->wstrust_applies_to =
 			add->wstrust_applies_to != NULL ?
 					add->wstrust_applies_to : base->wstrust_applies_to;
@@ -1135,9 +1413,16 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->wstrust_value_type != NULL ?
 					add->wstrust_value_type : base->wstrust_value_type;
 
-	c->ropc_token_endpoint =
-			add->ropc_token_endpoint != NULL ?
-					add->ropc_token_endpoint : base->ropc_token_endpoint;
+	c->ropc_endpoint =
+			add->ropc_endpoint != NULL ?
+					add->ropc_endpoint : base->ropc_endpoint;
+	c->ropc_endpoint_auth =
+			add->ropc_endpoint_auth != STS_CONFIG_POS_INT_UNSET ?
+					add->ropc_endpoint_auth : base->ropc_endpoint_auth;
+	c->ropc_endpoint_auth_options =
+			add->ropc_endpoint_auth_options != NULL ?
+					add->ropc_endpoint_auth_options :
+					base->ropc_endpoint_auth_options;
 	c->ropc_client_id =
 			add->ropc_client_id != NULL ?
 					add->ropc_client_id : base->ropc_client_id;
@@ -1145,10 +1430,19 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->ropc_username != NULL ?
 					add->ropc_username : base->ropc_username;
 
-	c->oauth_token_exchange_endpoint =
-			add->oauth_token_exchange_endpoint != NULL ?
-					add->oauth_token_exchange_endpoint :
-					base->oauth_token_exchange_endpoint;
+	c->oauth_tx_endpoint =
+			add->oauth_tx_endpoint != NULL ?
+					add->oauth_tx_endpoint : base->oauth_tx_endpoint;
+	c->oauth_tx_endpoint_auth =
+			add->oauth_tx_endpoint_auth != STS_CONFIG_POS_INT_UNSET ?
+					add->oauth_tx_endpoint_auth : base->oauth_tx_endpoint_auth;
+	c->oauth_tx_endpoint_auth_options =
+			add->oauth_tx_endpoint_auth_options != NULL ?
+					add->oauth_tx_endpoint_auth_options :
+					base->oauth_tx_endpoint_auth_options;
+	c->oauth_tx_client_id =
+			add->oauth_tx_client_id != NULL ?
+					add->oauth_tx_client_id : base->oauth_tx_client_id;
 
 	c->cache_cfg = add->cache_cfg != NULL ? add->cache_cfg : base->cache_cfg;
 	//c->cache_shm_size_max = add->cache_shm_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_size_max : base->cache_shm_size_max;
@@ -1234,11 +1528,17 @@ static const command_rec sts_cmds[] = {
 				"Set the STS resource value."),
 
 		AP_INIT_TAKE1(
-				"STSWSTrustUrl",
+				"STSWSTrustEndpoint",
 				sts_set_string_slot,
-				(void*)APR_OFFSETOF(sts_server_config, wstrust_sts_url),
+				(void*)APR_OFFSETOF(sts_server_config, wstrust_endpoint),
 				RSRC_CONF,
 				"Set the WS-Trust STS endpoint."),
+		AP_INIT_TAKE1(
+				"STSWSTrustEndpointAuth",
+				sts_set_wstrust_endpoint_auth,
+				(void*)APR_OFFSETOF(sts_server_config, wstrust_endpoint_auth),
+				RSRC_CONF,
+				"Configure how this module authenticates to the WS-Trust Endpoint."),
 		AP_INIT_TAKE1(
 				"STSWSTrustAppliesTo",
 				sts_set_string_slot,
@@ -1259,11 +1559,17 @@ static const command_rec sts_cmds[] = {
 				"Set the WS-Trust Value Type."),
 
 		AP_INIT_TAKE1(
-				"STSROPCTokenEndpoint",
+				"STSROPCEndpoint",
 				sts_set_string_slot,
-				(void*)APR_OFFSETOF(sts_server_config, ropc_token_endpoint),
+				(void*)APR_OFFSETOF(sts_server_config, ropc_endpoint),
 				RSRC_CONF,
 				"Set the OAuth 2.0 ROPC Token Endpoint."),
+		AP_INIT_TAKE1(
+				"STSROPCEndpointAuth",
+				sts_set_ropc_endpoint_auth,
+				(void*)APR_OFFSETOF(sts_server_config, ropc_endpoint_auth),
+				RSRC_CONF,
+				"Configure how this module authenticates to the ROPC Endpoint."),
 		AP_INIT_TAKE1(
 				"STSROPCClientID",
 				sts_set_string_slot,
@@ -1280,9 +1586,21 @@ static const command_rec sts_cmds[] = {
 		AP_INIT_TAKE1(
 				"STSOAuthTokenExchangeEndpoint",
 				sts_set_string_slot,
-				(void*)APR_OFFSETOF(sts_server_config, oauth_token_exchange_endpoint),
+				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_endpoint),
 				RSRC_CONF,
 				"Set the OAuth 2.0 Token Exchange Endpoint."),
+		AP_INIT_TAKE1(
+				"STSOAuthTokenExchangeEndpointAuth",
+				sts_set_oauth_tx_endpoint_auth,
+				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_endpoint_auth),
+				RSRC_CONF,
+				"Configure how this module authenticates to the OAuth 2.0 Token Exchange Endpoint."),
+		AP_INIT_TAKE1(
+				"STSOAuthTokenExchangeClientID",
+				sts_set_string_slot,
+				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_client_id),
+				RSRC_CONF,
+				"Set the Client ID for the OAuth 2.0 Token Exchange request."),
 
 		AP_INIT_TAKE1(
 				"STSCacheExpiresIn",
