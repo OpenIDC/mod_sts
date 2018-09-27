@@ -1,3 +1,9 @@
+9/27/2018
+- support multiple target token representations
+- support multiple named options in source and target tokens
+- adapt README.md to generic tokens
+- version 0.5.0
+
 9/25/2018
 - re-factor helper functions into util.c
 - parse options on incoming access token presentation method (e.g. cookie:PA.global)

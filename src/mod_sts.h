@@ -113,10 +113,11 @@ typedef struct {
 typedef struct {
 	int enabled;
 	int cache_expires_in;
-	char *target_token_cookie_name;
+	char *resource;
 	int accept_source_token_in;
 	apr_hash_t *accept_source_token_in_options;
-	char *resource;
+	int set_target_token_in;
+	apr_hash_t *set_target_token_in_options;
 } sts_dir_config;
 
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr);
@@ -150,5 +151,9 @@ apr_byte_t sts_util_decode_json_and_check_error(request_rec *r, const char *str,
 		json_t **json);
 apr_byte_t sts_util_json_object_get_string(apr_pool_t *pool, json_t *json,
 		const char *name, char **value, const char *default_value);
+char *sts_util_http_form_encoded_data(request_rec *r,
+		const apr_table_t *params);
+void sts_util_hdr_in_set(const request_rec *r, const char *name,
+		const char *value);
 
 #endif /* MOD_STS_H_ */

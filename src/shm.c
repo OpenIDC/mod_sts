@@ -18,18 +18,12 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2013-2017 Ping Identity Corporation
+ * Copyright (C) 2017-2018 ZmartZone IAM
  * All rights reserved.
  *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
- *
- * DISCLAIMER OF WARRANTIES:
+ *      ZmartZone IAM
+ *      info@zmartzone.eu
+ *      http://www.zmartzone.eu
  *
  * THE SOFTWARE PROVIDED HEREUNDER IS PROVIDED ON AN "AS IS" BASIS, WITHOUT
  * ANY WARRANTIES OR REPRESENTATIONS EXPRESS, IMPLIED OR STATUTORY; INCLUDING,
@@ -89,8 +83,7 @@ apr_byte_t sts_cache_mutex_post_config(server_rec *s, sts_cache_mutex_t *m,
 	/* construct the mutex filename */
 	apr_temp_dir_get(&dir, s->process->pool);
 	m->mutex_filename = apr_psprintf(s->process->pool,
-			"%s/mod_sts_%s_mutex.%ld.%pp", dir, type,
-			(long int) getpid(), s);
+			"%s/mod_sts_%s_mutex.%ld.%pp", dir, type, (long int) getpid(), s);
 
 	/* create the mutex lock */
 	rv = apr_global_mutex_create(&m->mutex, (const char *) m->mutex_filename,
@@ -221,8 +214,8 @@ static void *sts_cache_shm_cfg_create(apr_pool_t *pool) {
  * initialized the shared memory block in the parent process
  */
 int sts_cache_shm_post_config(server_rec *s) {
-	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(s->module_config,
-			&sts_module);
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			s->module_config, &sts_module);
 
 	if (cfg->cache_cfg != NULL)
 		return APR_SUCCESS;
@@ -455,8 +448,8 @@ apr_byte_t sts_cache_shm_set(request_rec *r, const char *section,
 }
 
 int sts_cache_shm_destroy(server_rec *s) {
-	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(s->module_config,
-			&sts_module);
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			s->module_config, &sts_module);
 	sts_cache_cfg_shm_t *context = (sts_cache_cfg_shm_t *) cfg->cache_cfg;
 	apr_status_t rv = APR_SUCCESS;
 

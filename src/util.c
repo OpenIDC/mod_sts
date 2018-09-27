@@ -342,8 +342,7 @@ static int sts_util_http_add_form_url_encoded_param(void* rec, const char* key,
 	return 1;
 }
 
-static char *sts_util_http_form_encoded_data(request_rec *r,
-		const apr_table_t *params) {
+char *sts_util_http_form_encoded_data(request_rec *r, const apr_table_t *params) {
 	char *data = NULL;
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
 		sts_util_http_encode_t encode_data = { r, NULL };
@@ -458,6 +457,42 @@ static const char *sts_util_hdr_in_get(const request_rec *r, const char *name) {
 	if (value)
 		sts_debug(r, "%s=%s", name, value);
 	return value;
+}
+
+static void sts_util_hdr_table_set(const request_rec *r, apr_table_t *table,
+		const char *name, const char *value) {
+
+	if (value != NULL) {
+
+		char *s_value = apr_pstrdup(r->pool, value);
+
+		/*
+		 * sanitize the header value by replacing line feeds with spaces
+		 * just like the Apache header input algorithms do for incoming headers
+		 *
+		 * this makes it impossible to have line feeds in values but that is
+		 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
+		 * parsing of headers anyway) and fixes a security vulnerability on
+		 * overwriting/setting outgoing headers when used in proxy mode
+		 */
+		char *p = NULL;
+		while ((p = strchr(s_value, '\n')))
+			*p = ' ';
+
+		sts_debug(r, "%s: %s", name, s_value);
+		apr_table_set(table, name, s_value);
+
+	} else {
+
+		sts_debug(r, "unset %s", name);
+		apr_table_unset(table, name);
+
+	}
+}
+
+void sts_util_hdr_in_set(const request_rec *r, const char *name,
+		const char *value) {
+	sts_util_hdr_table_set(r, r->headers_in, name, value);
 }
 
 static const char *sts_util_hdr_in_get_left_most_only(const request_rec *r,
