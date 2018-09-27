@@ -1,5 +1,8 @@
 # Source files. mod_sts.c must be the first file.
 SRC=src/mod_sts.c \
+	src/wstrust.c \
+	src/ropc.c \
+	src/otx.c \
 	src/shm.c \
 	src/util.c
 

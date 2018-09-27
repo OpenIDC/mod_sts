@@ -1,4 +1,8 @@
 9/27/2018
+- split out exchange protocol functions in separate files
+- version 0.6.0
+
+9/27/2018
 - support client authentication methods: basic, post, client cert
 - version 0.5.1
 

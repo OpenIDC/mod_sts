@@ -43,13 +43,17 @@
  *
  **************************************************************************/
 
-#ifndef MOD_STS_H_
-#define MOD_STS_H_
+#ifndef _MOD_STS_H_
+#define _MOD_STS_H_
 
-#include <http_log.h>
-
+#include <apr_lib.h>
 #include <apr_strings.h>
 #include <apr_hash.h>
+
+#include <httpd.h>
+#include <http_log.h>
+#include <http_request.h>
+#include <http_protocol.h>
 
 #include <jansson.h>
 
@@ -89,6 +93,34 @@ APLOG_USE_MODULE(sts);
 
 #define STS_CONTENT_TYPE_FORM_ENCODED           "application/x-www-form-urlencoded"
 #define STS_CONTENT_TYPE_SOAP_UTF8              "application/soap+xml; charset=utf-8"
+
+#define STS_CONFIG_POS_INT_UNSET                   -1
+#define STS_CONFIG_DEFAULT_ENABLED                 1
+
+extern const int STS_ENDPOINT_AUTH_NONE;
+#define STS_ENDPOINT_AUTH_BASIC_STR                     "basic"
+extern const int STS_ENDPOINT_AUTH_BASIC;
+#define STS_ENDPOINT_AUTH_CLIENT_CERT_STR               "client_cert"
+extern const int STS_ENDPOINT_AUTH_CLIENT_CERT;
+#define STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC_STR       "client_secret_basic"
+extern const int STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC;
+#define STS_ENDPOINT_AUTH_CLIENT_SECRET_POST_STR        "client_secret_post"
+extern const int STS_ENDPOINT_AUTH_CLIENT_SECRET_POST;
+#define STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT_STR         "client_secret_jwt"
+extern const int STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT;
+#define STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT_STR           "private_key_jwt"
+extern const int STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
+
+#define STS_ENDPOINT_AUTH_OPTION_USERNAME          "username"
+#define STS_ENDPOINT_AUTH_OPTION_PASSWORD          "password"
+#define STS_ENDPOINT_AUTH_OPTION_SECRET            "secret"
+#define STS_ENDPOINT_AUTH_OPTION_CERT              "cert"
+#define STS_ENDPOINT_AUTH_OPTION_KEY               "key"
+
+#define STS_OAUTH_CLIENT_ID                        "client_id"
+#define STS_OAUTH_CLIENT_SECRET                    "client_secret"
+#define STS_OAUTH_GRANT_TYPE                       "grant_type"
+#define STS_OAUTH_ACCESS_TOKEN                     "access_token"
 
 typedef struct {
 	int mode;
@@ -131,8 +163,11 @@ typedef struct {
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr);
 void *sts_create_dir_config(apr_pool_t *pool, char *path);
 
-apr_byte_t sts_util_http_token_exchange(request_rec *r, const char *token,
+apr_byte_t sts_util_token_exchange(request_rec *r, const char *token,
 		char **rtoken);
+apr_byte_t sts_exec_wstrust(request_rec *r, const char *token, char **rtoken);
+apr_byte_t sts_exec_ropc(request_rec *r, const char *token, char **rtoken);
+apr_byte_t sts_exec_otx(request_rec *r, const char *token, char **rtoken);
 
 int sts_cache_shm_post_config(server_rec *s);
 int sts_cache_shm_child_init(apr_pool_t *p, server_rec *s);
@@ -164,4 +199,17 @@ char *sts_util_http_form_encoded_data(request_rec *r,
 void sts_util_hdr_in_set(const request_rec *r, const char *name,
 		const char *value);
 
-#endif /* MOD_STS_H_ */
+const char *sts_get_config_method_option(request_rec *r,
+		apr_hash_t *config_method_options, const char *type, const char *key,
+		char *default_value);
+apr_byte_t sts_get_endpoint_auth_cert_key(request_rec *r, apr_hash_t *options,
+		const char **client_cert, const char **client_key);
+apr_byte_t sts_get_oauth_endpoint_auth(request_rec *r, int auth,
+		apr_hash_t *auth_options, apr_table_t *params, const char *client_id,
+		char **basic_auth, const char **client_cert, const char **client_key);
+const char * sts_get_resource(request_rec *r);
+
+int sts_get_ssl_validation(request_rec *r);
+int sts_get_http_timeout(request_rec *r);
+
+#endif /* _MOD_STS_H_ */

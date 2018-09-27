@@ -43,11 +43,11 @@
  *
  **************************************************************************/
 
+#include "mod_sts.h"
+
 #include <http_core.h>
 #include <http_protocol.h>
 #include <curl/curl.h>
-
-#include "mod_sts.h"
 
 static char *sts_util_unescape_string(apr_pool_t *pool, const char *str) {
 	CURL *curl = curl_easy_init();
