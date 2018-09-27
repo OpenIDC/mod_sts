@@ -45,6 +45,7 @@
 
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
+// TODO: strip the source token from the propagated request? (optionally?)
 // TODO: client authentication options for all(!) STS methods
 #include <httpd.h>
 #include <http_config.h>
