@@ -46,6 +46,7 @@
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
 // TODO: strip the source token from the propagated request? (optionally?)
+//       FWIW: the authorization header will be overwritten
 // TODO: client authentication options for all(!) STS methods
 #include <httpd.h>
 #include <http_config.h>
@@ -106,13 +107,13 @@ module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_CONFIG_DEFAULT_HTTP_TIMEOUT            20
 
 #define STS_CONFIG_TOKEN_ENVVAR_STR                "environment"
-#define STS_CONFIG_TOKEN_ENVVAR                     1
+static const int STS_CONFIG_TOKEN_ENVVAR         = 1;
 #define STS_CONFIG_TOKEN_HEADER_STR                "header"
-#define STS_CONFIG_TOKEN_HEADER                     2
+static const int STS_CONFIG_TOKEN_HEADER         = 2;
 #define STS_CONFIG_TOKEN_QUERY_STR                 "query"
-#define STS_CONFIG_TOKEN_QUERY                     4
+static const int STS_CONFIG_TOKEN_QUERY          = 4;
 #define STS_CONFIG_TOKEN_COOKIE_STR                "cookie"
-#define STS_CONFIG_TOKEN_COOKIE                    8
+static const int STS_CONFIG_TOKEN_COOKIE         = 8;
 
 #define STS_DEFAULT_ACCEPT_SOURCE_TOKEN_IN         (STS_CONFIG_TOKEN_ENVVAR | STS_CONFIG_TOKEN_HEADER)
 #define STS_DEFAULT_SET_TARGET_TOKEN_IN            (STS_CONFIG_TOKEN_ENVVAR | STS_CONFIG_TOKEN_COOKIE)
@@ -134,6 +135,12 @@ module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_TARGET_TOKEN_QUERY_PARAM_NAME_DEFAULT  "access_token"
 #define STS_TARGET_TOKEN_HEADER_NAME_DEFAULT       STS_HEADER_AUTHORIZATION
 #define STS_TARGET_TOKEN_HEADER_TYPE_DEFAULT       STS_HEADER_AUTHORIZATION_BEARER
+
+#define STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC      "client_secret_basic"
+#define STS_ENDPOINT_AUTH_CLIENT_SECRET_POST       "client_secret_post"
+#define STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT        "client_secret_jwt"
+#define STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT          "private_key_jwt"
+#define STS_ENDPOINT_AUTH_CLIENT_CERT              "client_cert"
 
 static apr_status_t sts_cleanup_handler(void *data) {
 	server_rec *s = (server_rec *) data;
@@ -231,27 +238,23 @@ static void sts_set_config_token_options(cmd_parms *cmd,
 }
 
 static apr_hash_t *sts_get_allowed_methods(apr_pool_t *pool, char *allowed[]) {
-	static int STS_CONFIG_TOKEN_ENVVAR_INT = STS_CONFIG_TOKEN_ENVVAR;
-	static int STS_CONFIG_TOKEN_HEADER_INT = STS_CONFIG_TOKEN_HEADER;
-	static int STS_CONFIG_TOKEN_QUERY_INT = STS_CONFIG_TOKEN_QUERY;
-	static int STS_CONFIG_TOKEN_COOKIE_INT = STS_CONFIG_TOKEN_COOKIE;
 	apr_hash_t *methods = apr_hash_make(pool);
 	int i = 0;
 	while (allowed[i] != NULL) {
 		if (apr_strnatcmp(STS_CONFIG_TOKEN_ENVVAR_STR, allowed[i]) == 0) {
 			apr_hash_set(methods, STS_CONFIG_TOKEN_ENVVAR_STR,
-					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_ENVVAR_INT);
+					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_ENVVAR);
 		} else if (apr_strnatcmp(STS_CONFIG_TOKEN_HEADER_STR, allowed[i])
 				== 0) {
 			apr_hash_set(methods, STS_CONFIG_TOKEN_HEADER_STR,
-					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_HEADER_INT);
+					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_HEADER);
 		} else if (apr_strnatcmp(STS_CONFIG_TOKEN_QUERY_STR, allowed[i]) == 0) {
 			apr_hash_set(methods, STS_CONFIG_TOKEN_QUERY_STR,
-					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_QUERY_INT);
+					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_QUERY);
 		} else if (apr_strnatcmp(STS_CONFIG_TOKEN_COOKIE_STR, allowed[i])
 				== 0) {
 			apr_hash_set(methods, STS_CONFIG_TOKEN_COOKIE_STR,
-					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_COOKIE_INT);
+					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_COOKIE);
 		}
 		i++;
 	}
