@@ -638,3 +638,7 @@ char *sts_util_get_current_url(request_rec *r) {
 	sts_debug(r, "current URL: %s", url);
 	return url;
 }
+
+char *sts_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename) {
+	return (abs_or_rel_filename) ? ap_server_root_relative(pool, abs_or_rel_filename) : NULL;
+}

@@ -49,6 +49,7 @@
 //       or should we only handle source/target envvar stuff there?
 // TODO: strip the source token from the propagated request? (optionally?)
 //       FWIW: the authorization header will be overwritten
+// TOOD: ws-trust source tokens can only be presented as BinarySecurityToken's; should we support native SAML 2.0 etc.?
 #include "mod_sts.h"
 
 module AP_MODULE_DECLARE_DATA sts_module;
@@ -62,8 +63,8 @@ module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_CONFIG_MODE_WSTRUST                    0
 #define STS_CONFIG_MODE_ROPC_STR                   "ropc"
 #define STS_CONFIG_MODE_ROPC                       1
-#define STS_CONFIG_MODE_OAUTH_TX_STR               "oauth"
-#define STS_CONFIG_MODE_OAUTH_TX                   2
+#define STS_CONFIG_MODE_OTX_STR                    "otx"
+#define STS_CONFIG_MODE_OTX                        2
 
 #define STS_CONFIG_DEFAULT_STS_MODE                STS_CONFIG_MODE_WSTRUST
 
@@ -182,12 +183,12 @@ static const char *sts_set_mode(cmd_parms *cmd, void *m, const char *arg) {
 		cfg->mode = STS_CONFIG_MODE_ROPC;
 		return NULL;
 	}
-	if (strcmp(arg, STS_CONFIG_MODE_OAUTH_TX_STR) == 0) {
-		cfg->mode = STS_CONFIG_MODE_OAUTH_TX;
+	if (strcmp(arg, STS_CONFIG_MODE_OTX_STR) == 0) {
+		cfg->mode = STS_CONFIG_MODE_OTX;
 		return NULL;
 	}
 
-	return "Invalid value: must be \"" STS_CONFIG_MODE_WSTRUST_STR "\", \"" STS_CONFIG_MODE_ROPC_STR "\" or \"" STS_CONFIG_MODE_OAUTH_TX_STR "\"";
+	return "Invalid value: must be \"" STS_CONFIG_MODE_WSTRUST_STR "\", \"" STS_CONFIG_MODE_ROPC_STR "\" or \"" STS_CONFIG_MODE_OTX_STR "\"";
 }
 
 static void sts_set_config_method_options(cmd_parms *cmd,
@@ -755,24 +756,26 @@ static int sts_fixup_handler(request_rec *r) {
 
 apr_byte_t sts_get_endpoint_auth_cert_key(request_rec *r, apr_hash_t *options,
 		const char **client_cert, const char **client_key) {
-	*client_cert = sts_get_config_method_option(r, options,
+	 const char *cert = sts_get_config_method_option(r, options,
 			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
 			STS_ENDPOINT_AUTH_OPTION_CERT,
 			NULL);
-	*client_key = sts_get_config_method_option(r, options,
+	const char *key = sts_get_config_method_option(r, options,
 			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
 			STS_ENDPOINT_AUTH_OPTION_KEY,
 			NULL);
-	if (*client_cert == NULL) {
+	if (cert == NULL) {
 		sts_error(r,
 				"when using \"" STS_ENDPOINT_AUTH_CLIENT_CERT_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_CERT "\" option must be set on the configuration directive");
 		return FALSE;
 	}
-	if (*client_key == NULL) {
+	if (key == NULL) {
 		sts_error(r,
 				"when using \"" STS_ENDPOINT_AUTH_CLIENT_CERT_STR "\" the \"" STS_ENDPOINT_AUTH_OPTION_KEY "\" option must be set on the configuration directive");
 		return FALSE;
 	}
+	*client_cert = sts_util_get_full_path(r->pool, cert);
+	*client_key = sts_util_get_full_path(r->pool, key);
 	return TRUE;
 }
 
@@ -830,7 +833,7 @@ apr_byte_t sts_util_token_exchange(request_rec *r, const char *token,
 		return sts_exec_wstrust(r, token, rtoken);
 	if (mode == STS_CONFIG_MODE_ROPC)
 		return sts_exec_ropc(r, token, rtoken);
-	if (mode == STS_CONFIG_MODE_OAUTH_TX)
+	if (mode == STS_CONFIG_MODE_OTX)
 		return sts_exec_otx(r, token, rtoken);
 	sts_error(r, "unknown STS mode %d", mode);
 	return FALSE;
@@ -996,7 +999,7 @@ static const command_rec sts_cmds[] = {
 				sts_set_mode,
 				(void*)APR_OFFSETOF(sts_server_config, mode),
 				RSRC_CONF,
-				"Set STS mode to \"" STS_CONFIG_MODE_WSTRUST_STR "\", \"" STS_CONFIG_MODE_ROPC_STR "\" or \"" STS_CONFIG_MODE_OAUTH_TX_STR "\"."),
+				"Set STS mode to \"" STS_CONFIG_MODE_WSTRUST_STR "\", \"" STS_CONFIG_MODE_ROPC_STR "\" or \"" STS_CONFIG_MODE_OTX_STR "\"."),
 		AP_INIT_FLAG(
 				"STSSSLValidateServer",
 				sts_set_flag_slot,
@@ -1074,19 +1077,19 @@ static const command_rec sts_cmds[] = {
 				"Set the username to be used in the OAuth 2.0 ROPC token request; if left empty the client_id will be passed in the username parameter."),
 
 		AP_INIT_TAKE1(
-				"STSOAuthTokenExchangeEndpoint",
+				"STSOTXEndpoint",
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_endpoint),
 				RSRC_CONF,
 				"Set the OAuth 2.0 Token Exchange Endpoint."),
 		AP_INIT_TAKE1(
-				"STSOAuthTokenExchangeEndpointAuth",
+				"STSOTXEndpointAuth",
 				sts_set_oauth_tx_endpoint_auth,
 				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_endpoint_auth),
 				RSRC_CONF,
 				"Configure how this module authenticates to the OAuth 2.0 Token Exchange Endpoint."),
 		AP_INIT_TAKE1(
-				"STSOAuthTokenExchangeClientID",
+				"STSOTXClientID",
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_client_id),
 				RSRC_CONF,

@@ -212,4 +212,6 @@ const char * sts_get_resource(request_rec *r);
 int sts_get_ssl_validation(request_rec *r);
 int sts_get_http_timeout(request_rec *r);
 
+char *sts_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename);
+
 #endif /* _MOD_STS_H_ */
