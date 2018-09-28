@@ -85,41 +85,53 @@ apr_byte_t sts_util_read_form_encoded_params(apr_pool_t *pool,
 	return TRUE;
 }
 
-char *sts_util_get_cookie(request_rec *r, const char *cookieName) {
-	char *cookie, *tokenizerCtx, *rv = NULL;
+char *sts_util_get_cookie(request_rec *r, const char *cookieName, int stripit) {
 
+	char *elem, *cp, *np, *tokenizerCtx, *rv = NULL;
 	char *cookies = apr_pstrdup(r->pool,
-			apr_table_get(r->headers_in, STS_HEADER_COOKIE));
+			sts_util_hdr_in_get(r, STS_HEADER_COOKIE));
+	char *new_cookies = NULL;
+	int copy = 1;
 
 	if (cookies != NULL) {
 
 		/* tokenize on ; to find the cookie we want */
-		cookie = apr_strtok(cookies, ";", &tokenizerCtx);
+		elem = apr_strtok(cookies, ";", &tokenizerCtx);
+		while (elem != NULL) {
 
-		while (cookie != NULL) {
-
-			while (*cookie == ' ')
-				cookie++;
+			copy = 1;
+			cp = elem;
+			while (*cp == ' ')
+				cp++;
 
 			/* see if we've found the cookie that we're looking for */
-			if ((strncmp(cookie, cookieName, strlen(cookieName)) == 0)
-					&& (cookie[strlen(cookieName)] == '=')) {
+			if ((strncmp(cp, cookieName, strlen(cookieName)) == 0)
+					&& (cp[strlen(cookieName)] == '=')) {
 
 				/* skip to the meat of the parameter (the value after the '=') */
-				cookie += (strlen(cookieName) + 1);
-				rv = apr_pstrdup(r->pool, cookie);
+				np = cp + (strlen(cookieName) + 1);
+				rv = apr_pstrdup(r->pool, np);
 
-				break;
+				copy = (stripit == 0);
 			}
 
+			if (copy)
+				new_cookies =
+						(new_cookies != NULL) ?
+								apr_psprintf(r->pool, "%s; %s", new_cookies,
+										cp) :
+										apr_pstrdup(r->pool, cp);
+
 			/* go to the next cookie */
-			cookie = apr_strtok(NULL, ";", &tokenizerCtx);
+			elem = apr_strtok(NULL, ";", &tokenizerCtx);
 		}
 	}
 
 	/* log what we've found */
-	sts_debug(r, "returning \"%s\" = %s", cookieName,
+	sts_debug(r, "returning \"%s\"=\"%s\"", cookieName,
 			rv ? apr_psprintf(r->pool, "\"%s\"", rv) : "<null>");
+
+	sts_util_hdr_in_set(r, STS_HEADER_COOKIE, new_cookies);
 
 	return rv;
 }
@@ -453,7 +465,7 @@ apr_byte_t sts_util_json_object_get_string(apr_pool_t *pool, json_t *json,
 	return TRUE;
 }
 
-static const char *sts_util_hdr_in_get(const request_rec *r, const char *name) {
+const char *sts_util_hdr_in_get(const request_rec *r, const char *name) {
 	const char *value = apr_table_get(r->headers_in, name);
 	if (value)
 		sts_debug(r, "%s=%s", name, value);

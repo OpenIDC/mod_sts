@@ -163,6 +163,7 @@ typedef struct {
 	char *resource;
 	int accept_source_token_in;
 	apr_hash_t *accept_source_token_in_options;
+	int strip_source_token;
 	int set_target_token_in;
 	apr_hash_t *set_target_token_in_options;
 } sts_dir_config;
@@ -189,7 +190,7 @@ int sts_cache_shm_destroy(server_rec *s);
 
 apr_byte_t sts_util_read_form_encoded_params(apr_pool_t *pool,
 		apr_table_t *table, char *data);
-char *sts_util_get_cookie(request_rec *r, const char *cookieName);
+char *sts_util_get_cookie(request_rec *r, const char *cookieName, int stripit);
 apr_byte_t sts_util_http_call(request_rec *r, const char *url, const char *data,
 		const char *content_type, const char *basic_auth,
 		const char *soap_action, int ssl_validate_server, char **response,
@@ -208,6 +209,7 @@ char *sts_util_http_form_encoded_data(request_rec *r,
 		const apr_table_t *params);
 void sts_util_hdr_in_set(const request_rec *r, const char *name,
 		const char *value);
+const char *sts_util_hdr_in_get(const request_rec *r, const char *name);
 
 const char *sts_get_config_method_option(request_rec *r,
 		apr_hash_t *config_method_options, const char *type, const char *key,

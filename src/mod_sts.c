@@ -43,8 +43,6 @@
  *
  **************************************************************************/
 
-// TODO: strip the source token from the propagated request? (optionally?)
-//       FWIW: the authorization header will be overwritten
 // TODO: see if token caching is correct wrt. different request parameters in per-directory context (need per-dir cache?)
 // TODO: check for a sane configuration at startup (and leave current localhost defaults to null)
 // TODO: is the fixup handler the right place for the sts_handler
@@ -72,6 +70,7 @@ module AP_MODULE_DECLARE_DATA sts_module;
 
 #define STS_CACHE_SECTION                          "sts"
 
+#define STS_CONFIG_DEFAULT_STRIP_SOURCE_TOKEN      1
 #define STS_CONFIG_DEFAULT_SSL_VALIDATION          1
 #define STS_CONFIG_DEFAULT_HTTP_TIMEOUT            20
 
@@ -406,6 +405,14 @@ static int sts_get_enabled(request_rec *r) {
 	return dir_cfg->enabled;
 }
 
+static int sts_get_strip_source_token(request_rec *r) {
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+	if (dir_cfg->strip_source_token == STS_CONFIG_POS_INT_UNSET)
+		return STS_CONFIG_DEFAULT_STRIP_SOURCE_TOKEN;
+	return dir_cfg->strip_source_token;
+}
+
 int sts_get_ssl_validation(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
@@ -488,6 +495,8 @@ static char *sts_get_source_token_from_envvar(request_rec *r) {
 	if (source_token == NULL) {
 		sts_debug(r, "no source found in %s subprocess environment variables",
 				envvar_name);
+	} else if (sts_get_strip_source_token(r) != 0) {
+		apr_table_unset(r->subprocess_env, envvar_name);
 	}
 	return source_token;
 }
@@ -510,7 +519,7 @@ static char *sts_get_source_token_from_header(request_rec *r) {
 			STS_CONFIG_TOKEN_OPTION_TYPE,
 			STS_SOURCE_TOKEN_HEADER_TYPE_DEFAULT);
 
-	const char *auth_line = apr_table_get(r->headers_in, name);
+	const char *auth_line = sts_util_hdr_in_get(r, name);
 	if (auth_line) {
 		sts_debug(r, "%s header found", name);
 		if ((type != NULL) && (apr_strnatcasecmp(type, "") != 0)) {
@@ -525,6 +534,9 @@ static char *sts_get_source_token_from_header(request_rec *r) {
 			auth_line++;
 		source_token = apr_pstrdup(r->pool, auth_line);
 	}
+
+	if ((source_token != NULL) && (sts_get_strip_source_token(r) != 0))
+		sts_util_hdr_in_set(r, name, NULL);
 
 	return source_token;
 }
@@ -550,9 +562,15 @@ static char *sts_get_source_token_from_query(request_rec *r) {
 	source_token = apr_pstrdup(r->pool,
 			apr_table_get(params, query_param_name));
 
-	if (source_token == NULL)
+	if (source_token == NULL) {
 		sts_debug(r, "no source token found in query parameter: %s",
 				query_param_name);
+	} else if (sts_get_strip_source_token(r) != 0) {
+		sts_debug(r, "stripping query param %s from outgoing request",
+				query_param_name);
+		apr_table_unset(params, query_param_name);
+		r->args = sts_util_http_form_encoded_data(r, params);
+	}
 
 	return source_token;
 }
@@ -569,7 +587,8 @@ static char *sts_get_source_token_from_cookie(request_rec *r) {
 			STS_CONFIG_TOKEN_COOKIE_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
 			STS_SOURCE_TOKEN_COOKIE_NAME_DEFAULT);
-	source_token = sts_util_get_cookie(r, cookie_name);
+	source_token = sts_util_get_cookie(r, cookie_name,
+			sts_get_strip_source_token(r));
 	if (source_token == NULL)
 		sts_debug(r, "no source token found in cookie: %s", cookie_name);
 	return source_token;
@@ -692,14 +711,12 @@ static void sts_set_target_token_in_cookie(request_rec *r, char *target_token) {
 			STS_CONFIG_TOKEN_OPTION_NAME,
 			STS_TARGET_TOKEN_COOKIE_NAME_DEFAULT);
 
-	sts_debug(r, "set cookie to backend: %s=%s", cookie_name, target_token);
-
-	char *value = apr_pstrdup(r->pool,
-			apr_table_get(r->headers_in, STS_HEADER_COOKIE));
+	const char *value = sts_util_hdr_in_get(r, STS_HEADER_COOKIE);
 	value = (value != NULL) ? apr_psprintf(r->pool, "%s; ", value) : "";
-	;
+
 	value = apr_psprintf(r->pool, "%s%s=%s", value, cookie_name, target_token);
-	apr_table_set(r->headers_in, STS_HEADER_COOKIE, value);
+	sts_util_hdr_in_set(r, STS_HEADER_COOKIE, value);
+
 }
 
 static int sts_set_target_token(request_rec *r, char *target_token) {
@@ -1165,6 +1182,7 @@ void *sts_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cache_expires_in = STS_CONFIG_POS_INT_UNSET;
 	c->accept_source_token_in = STS_CONFIG_POS_INT_UNSET;
 	c->accept_source_token_in_options = NULL;
+	c->strip_source_token = STS_CONFIG_POS_INT_UNSET;
 	c->set_target_token_in = STS_CONFIG_POS_INT_UNSET;
 	c->set_target_token_in_options = NULL;
 	c->resource = NULL;
@@ -1188,6 +1206,16 @@ static void *sts_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->accept_source_token_in_options != NULL ?
 					add->accept_source_token_in_options :
 					base->accept_source_token_in_options;
+	c->strip_source_token =
+			add->strip_source_token != STS_CONFIG_POS_INT_UNSET ?
+					add->strip_source_token : base->strip_source_token;
+	c->set_target_token_in =
+			add->set_target_token_in != STS_CONFIG_POS_INT_UNSET ?
+					add->set_target_token_in : base->set_target_token_in;
+	c->set_target_token_in_options =
+			add->set_target_token_in_options != NULL ?
+					add->set_target_token_in_options :
+					base->set_target_token_in_options;
 
 	c->resource = add->resource != NULL ? add->resource : base->resource;
 	return c;
@@ -1330,6 +1358,13 @@ static const command_rec sts_cmds[] = {
 				(void*)APR_OFFSETOF(sts_dir_config, accept_source_token_in),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Configure how the source token may be presented."),
+
+		AP_INIT_FLAG(
+				"STSStripSourceToken",
+				ap_set_flag_slot,
+				(void*)APR_OFFSETOF(sts_dir_config, strip_source_token),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Enable or disable stripping of the source token from the outgoing request."),
 
 		AP_INIT_ITERATE(
 				"STSSetTargetTokenIn",

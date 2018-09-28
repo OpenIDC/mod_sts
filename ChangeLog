@@ -1,4 +1,8 @@
 9/28/2018
+- support stripping the source token from the outgoing request
+- version 0.7.4
+
+9/28/2018
 - support extra parameters to the OAuth 2.0 token exchange request via STSOTXRequestParameters
 - version 0.7.3
 
