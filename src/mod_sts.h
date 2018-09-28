@@ -121,6 +121,7 @@ extern const int STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
 #define STS_ENDPOINT_AUTH_OPTION_CERT              "cert"
 #define STS_ENDPOINT_AUTH_OPTION_KEY               "key"
 #define STS_ENDPOINT_AUTH_OPTION_AUD               "aud"
+#define STS_ENDPOINT_AUTH_OPTION_JWK               "jwk"
 
 #define STS_OAUTH_CLIENT_ID                        "client_id"
 #define STS_OAUTH_CLIENT_SECRET                    "client_secret"
@@ -206,17 +207,17 @@ void sts_util_hdr_in_set(const request_rec *r, const char *name,
 
 const char *sts_get_config_method_option(request_rec *r,
 		apr_hash_t *config_method_options, const char *type, const char *key,
-		char *default_value);
+		const char *default_value);
 apr_byte_t sts_get_endpoint_auth_cert_key(request_rec *r, apr_hash_t *options,
 		const char **client_cert, const char **client_key);
 apr_byte_t sts_get_oauth_endpoint_auth(request_rec *r, int auth,
-		apr_hash_t *auth_options, apr_table_t *params, const char *client_id,
-		char **basic_auth, const char **client_cert, const char **client_key);
+		apr_hash_t *auth_options, const char *endpoint, apr_table_t *params,
+		const char *client_id, char **basic_auth, const char **client_cert,
+		const char **client_key);
 const char * sts_get_resource(request_rec *r);
-
 int sts_get_ssl_validation(request_rec *r);
 int sts_get_http_timeout(request_rec *r);
-
 char *sts_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename);
+char *sts_generate_random_string(apr_pool_t *pool, int len);
 
 #endif /* _MOD_STS_H_ */

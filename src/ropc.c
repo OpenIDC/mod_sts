@@ -109,8 +109,8 @@ apr_byte_t sts_exec_ropc(request_rec *r, const char *token, char **rtoken) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
 	if (sts_get_oauth_endpoint_auth(r, sts_ropc_get_endpoint_auth(r),
-			cfg->ropc_endpoint_auth_options, params, client_id, &basic_auth,
-			&client_cert, &client_key) == FALSE)
+			cfg->ropc_endpoint_auth_options, sts_ropc_get_endpoint(r), params,
+			client_id, &basic_auth, &client_cert, &client_key) == FALSE)
 		return FALSE;
 
 	if (sts_util_http_post_form(r, sts_ropc_get_endpoint(r), params, basic_auth,

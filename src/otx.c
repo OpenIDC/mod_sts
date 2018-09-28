@@ -117,8 +117,8 @@ apr_byte_t sts_exec_otx(request_rec *r, const char *token, char **rtoken) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
 	if (sts_get_oauth_endpoint_auth(r, sts_otx_get_endpoint_auth(r),
-			cfg->oauth_tx_endpoint_auth_options, params, client_id, &basic_auth,
-			&client_cert, &client_key) == FALSE)
+			cfg->oauth_tx_endpoint_auth_options, sts_otx_get_endpoint(r),
+			params, client_id, &basic_auth, &client_cert, &client_key) == FALSE)
 		return FALSE;
 
 	int auth = sts_otx_get_endpoint_auth(r);

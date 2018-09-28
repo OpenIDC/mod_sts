@@ -47,6 +47,7 @@
 
 #include <http_core.h>
 #include <http_protocol.h>
+#include <apr_base64.h>
 #include <curl/curl.h>
 
 static char *sts_util_unescape_string(apr_pool_t *pool, const char *str) {
@@ -642,4 +643,14 @@ char *sts_util_get_current_url(request_rec *r) {
 char *sts_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename) {
 	return (abs_or_rel_filename) ?
 			ap_server_root_relative(pool, abs_or_rel_filename) : NULL;
+}
+
+char *sts_generate_random_string(apr_pool_t *pool, int len) {
+	unsigned char *bytes = apr_pcalloc(pool, len);
+	if (apr_generate_random_bytes(bytes, len) != APR_SUCCESS)
+		return NULL;
+	unsigned int enc_len = apr_base64_encode_len(len);
+	char *enc = apr_palloc(pool, enc_len);
+	apr_base64_encode(enc, (const char *) bytes, len);
+	return apr_pstrndup(pool, enc, len);
 }
