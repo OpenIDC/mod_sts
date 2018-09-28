@@ -375,14 +375,13 @@ static const char *sts_set_oauth_tx_endpoint_auth(cmd_parms *cmd, void *m,
 			&cfg->oauth_tx_endpoint_auth_options);
 }
 
-static const char *sts_set_oauth_tx_request_parameters(cmd_parms *cmd, void *m,
-		const char *arg) {
+static const char *sts_set_oauth_tx_request_parameter(cmd_parms *cmd, void *m,
+		const char *arg1, const char *arg2) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			cmd->server->module_config, &sts_module);
 	if (cfg->oauth_tx_request_parameters == NULL)
 		cfg->oauth_tx_request_parameters = apr_table_make(cmd->pool, 2);
-	sts_util_read_form_encoded_params(cmd->pool,
-			cfg->oauth_tx_request_parameters, apr_pstrdup(cmd->pool, arg));
+	apr_table_add(cfg->oauth_tx_request_parameters, arg1, arg2);
 	return NULL;
 }
 
@@ -1335,9 +1334,9 @@ static const command_rec sts_cmds[] = {
 				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_client_id),
 				RSRC_CONF,
 				"Set the Client ID for the OAuth 2.0 Token Exchange request."),
-		AP_INIT_ITERATE(
-				"STSOTXRequestParameters",
-				sts_set_oauth_tx_request_parameters,
+		AP_INIT_TAKE12(
+				"STSOTXRequestParameter",
+				sts_set_oauth_tx_request_parameter,
 				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_request_parameters),
 				RSRC_CONF,
 				"Set extra request parameters to the token exchange request."),

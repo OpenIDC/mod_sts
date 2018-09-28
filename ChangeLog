@@ -1,4 +1,8 @@
 9/28/2018
+- add name value parameters by AP_INIT_TAKE2 syntax and rename STSOTXRequestParameters to STSOTXRequestParameter
+- version 0.7.6
+
+9/28/2018
 - get subject_token_type request parameter from STSOTXRequestParameters
 - version 0.7.5
 

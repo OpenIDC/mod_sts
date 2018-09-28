@@ -350,8 +350,8 @@ static int sts_util_http_add_form_url_encoded_param(void* rec, const char* key,
 	const char *sep = ctx->encoded_params ? "&" : "";
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
 			ctx->encoded_params ? ctx->encoded_params : "", sep,
-					sts_util_escape_string(ctx->r, key),
-					sts_util_escape_string(ctx->r, value));
+					key != NULL ? sts_util_escape_string(ctx->r, key) : "",
+							value != NULL ? sts_util_escape_string(ctx->r, value) : "");
 	return 1;
 }
 
