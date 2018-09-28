@@ -171,9 +171,12 @@ void *sts_create_dir_config(apr_pool_t *pool, char *path);
 
 apr_byte_t sts_util_token_exchange(request_rec *r, const char *token,
 		char **rtoken);
-apr_byte_t sts_exec_wstrust(request_rec *r, const char *token, char **rtoken);
-apr_byte_t sts_exec_ropc(request_rec *r, const char *token, char **rtoken);
-apr_byte_t sts_exec_otx(request_rec *r, const char *token, char **rtoken);
+apr_byte_t sts_exec_wstrust(request_rec *r, sts_server_config *cfg,
+		const char *token, char **rtoken);
+apr_byte_t sts_exec_ropc(request_rec *r, sts_server_config *cfg,
+		const char *token, char **rtoken);
+apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
+		const char *token, char **rtoken);
 
 int sts_cache_shm_post_config(server_rec *s);
 int sts_cache_shm_child_init(apr_pool_t *p, server_rec *s);

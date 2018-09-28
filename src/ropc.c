@@ -87,27 +87,28 @@ static const char * sts_ropc_get_username(request_rec *r) {
 	return cfg->ropc_username;
 }
 
-apr_byte_t sts_exec_ropc(request_rec *r, const char *token, char **rtoken) {
+apr_byte_t sts_exec_ropc(request_rec *r, sts_server_config *cfg,
+		const char *token, char **rtoken) {
 
+	apr_byte_t rv = FALSE;
 	char *response = NULL;
 	char *basic_auth = NULL;
+	apr_table_t *params = NULL;
+	json_t *result = NULL;
 	const char *client_cert = NULL, *client_key = NULL;
 	const char *client_id = sts_ropc_get_client_id(r);
 	const char *username = sts_ropc_get_username(r);
 
 	sts_debug(r, "enter");
 
-	apr_table_t *params = apr_table_make(r->pool, 4);
+	params = apr_table_make(r->pool, 4);
 	apr_table_addn(params, STS_OAUTH_GRANT_TYPE, STS_ROPC_GRANT_TYPE_VALUE);
-	if (client_id != NULL)
-		// TODO: if sts_get_ropc_endpoint_auth(r) == STS_ENDPOINT_AUTH_CLIENT_SECRET_BASIC we should not really do this
+	if (sts_ropc_get_endpoint_auth(r) == STS_ENDPOINT_AUTH_NONE)
 		apr_table_addn(params, STS_OAUTH_CLIENT_ID, client_id);
 	if (username != NULL)
 		apr_table_addn(params, STS_ROPC_USERNAME, username);
 	apr_table_addn(params, STS_ROPC_PASSWORD, token);
 
-	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
 	if (sts_get_oauth_endpoint_auth(r, sts_ropc_get_endpoint_auth(r),
 			cfg->ropc_endpoint_auth_options, sts_ropc_get_endpoint(r), params,
 			client_id, &basic_auth, &client_cert, &client_key) == FALSE)
@@ -120,11 +121,10 @@ apr_byte_t sts_exec_ropc(request_rec *r, const char *token, char **rtoken) {
 		return FALSE;
 	}
 
-	json_t *result = NULL;
 	if (sts_util_decode_json_and_check_error(r, response, &result) == FALSE)
 		return FALSE;
 
-	apr_byte_t rv = sts_util_json_object_get_string(r->pool, result,
+	rv = sts_util_json_object_get_string(r->pool, result,
 			STS_OAUTH_ACCESS_TOKEN, rtoken,
 			NULL);
 	/*

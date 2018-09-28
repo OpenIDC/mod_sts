@@ -1,4 +1,8 @@
 9/28/2018
+- add client_id to OTX request if auth=none; some cleanups
+- version 0.7.2
+
+9/28/2018
 - support private_key_jwt authentication method for ropc/otx
 - version 0.7.1
 

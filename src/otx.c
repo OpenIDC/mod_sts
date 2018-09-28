@@ -81,11 +81,15 @@ static const char * sts_otx_get_client_id(request_rec *r) {
 	return cfg->oauth_tx_client_id;
 }
 
-apr_byte_t sts_exec_otx(request_rec *r, const char *token, char **rtoken) {
+apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
+		const char *token, char **rtoken) {
 
+	apr_byte_t rv = FALSE;
 	char *response = NULL;
 	char *basic_auth = NULL;
 	const char *resource = NULL;
+	apr_table_t *params = NULL;
+	json_t *result = NULL;
 	const char *client_cert = NULL, *client_key = NULL;
 	const char *client_id = sts_otx_get_client_id(r);
 
@@ -95,17 +99,7 @@ apr_byte_t sts_exec_otx(request_rec *r, const char *token, char **rtoken) {
 	if (resource == NULL)
 		resource = sts_util_get_current_url(r);
 
-	/*
-	 example from IETF draft:
-
-	 grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange
-	 &resource=https%3A%2F%2Fbackend.example.com%2Fapi%20
-	 &subject_token=accVkjcJyb4BWCxGsndESCJQbdFMogUC5PbRDqceLTC
-	 &subject_token_type=
-	 urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token
-	 */
-
-	apr_table_t *params = apr_table_make(r->pool, 4);
+	params = apr_table_make(r->pool, 4);
 	apr_table_addn(params, STS_OTX_GRANT_TYPE_NAME,
 			STS_OTX_GRANT_TYPE_VALUE);
 	if (strcmp(resource, "") != 0)
@@ -113,19 +107,14 @@ apr_byte_t sts_exec_otx(request_rec *r, const char *token, char **rtoken) {
 	apr_table_addn(params, STS_OTX_SUBJECT_TOKEN_NAME, token);
 	apr_table_addn(params, STS_OTX_SUBJECT_TOKEN_TYPE_NAME,
 			STS_OTX_SUBJECT_TOKEN_TYPE_VALUE);
+	// TODO: this is not really specified...
+	if (sts_otx_get_endpoint_auth(r) == STS_ENDPOINT_AUTH_NONE)
+		apr_table_addn(params, STS_OAUTH_CLIENT_ID, client_id);
 
-	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
 	if (sts_get_oauth_endpoint_auth(r, sts_otx_get_endpoint_auth(r),
 			cfg->oauth_tx_endpoint_auth_options, sts_otx_get_endpoint(r),
 			params, client_id, &basic_auth, &client_cert, &client_key) == FALSE)
 		return FALSE;
-
-	int auth = sts_otx_get_endpoint_auth(r);
-	if (auth != STS_ENDPOINT_AUTH_NONE) {
-		// TODO:
-		basic_auth = NULL;
-	}
 
 	if (sts_util_http_post_form(r, sts_otx_get_endpoint(r), params, basic_auth,
 			sts_get_ssl_validation(r), &response, sts_get_http_timeout(r),
@@ -135,11 +124,10 @@ apr_byte_t sts_exec_otx(request_rec *r, const char *token, char **rtoken) {
 		return FALSE;
 	}
 
-	json_t *result = NULL;
 	if (sts_util_decode_json_and_check_error(r, response, &result) == FALSE)
 		return FALSE;
 
-	apr_byte_t rv = sts_util_json_object_get_string(r->pool, result,
+	rv = sts_util_json_object_get_string(r->pool, result,
 			STS_OTX_ACCESS_TOKEN, rtoken,
 			NULL);
 

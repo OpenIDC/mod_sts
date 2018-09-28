@@ -217,28 +217,32 @@ static const char *xpath_expr_template = "/s:Envelope"
 		"/wst:RequestedSecurityToken"
 		"/wsse:BinarySecurityToken[@ValueType='%s']";
 
-apr_byte_t sts_exec_wstrust(request_rec *r, const char *token, char **rtoken) {
+apr_byte_t sts_exec_wstrust(request_rec *r, sts_server_config *cfg,
+		const char *token, char **rtoken) {
 
 	char *response = NULL;
 	const char *basic_auth = NULL;
 	const char *client_cert = NULL;
 	const char *client_key = NULL;
-
-	sts_debug(r, "enter");
-
+	char *data = NULL;
 	const char *id1 = "_0";
 	char created[STR_SIZE];
 	char expires[STR_SIZE];
 	const char *id2 = "Me";
-
-	int enc_len = apr_base64_encode_len(strlen(token));
-	char *b64 = apr_palloc(r->pool, enc_len);
-	apr_base64_encode(b64, (const char *) token, strlen(token));
-
+	int enc_len = 0;
+	char *b64 = NULL;
 	apr_time_t now = apr_time_now();
 	apr_time_t then = now + apr_time_from_sec(300);
 	apr_size_t size;
 	apr_time_exp_t exp;
+	int auth;
+	const xmlChar *xpath_expr = NULL;
+
+	sts_debug(r, "enter");
+
+	enc_len = apr_base64_encode_len(strlen(token));
+	b64 = apr_palloc(r->pool, enc_len);
+	apr_base64_encode(b64, (const char *) token, strlen(token));
 
 	apr_time_exp_gmt(&exp, now);
 	apr_strftime(created, &size, STR_SIZE, "%Y-%m-%dT%H:%M:%SZ", &exp);
@@ -246,18 +250,19 @@ apr_byte_t sts_exec_wstrust(request_rec *r, const char *token, char **rtoken) {
 	apr_time_exp_gmt(&exp, then);
 	apr_strftime(expires, &size, STR_SIZE, "%Y-%m-%dT%H:%M:%SZ", &exp);
 
-	char *data = apr_psprintf(r->pool, ws_trust_soap_call_template, id1,
-			created, expires, id2, sts_wstrust_get_value_type(r), b64,
+	data = apr_psprintf(r->pool, ws_trust_soap_call_template, id1, created,
+			expires, id2, sts_wstrust_get_value_type(r), b64,
 			sts_wstrust_get_endpoint(r), STS_WSTRUST_ACTION_DEFAULT,
 			sts_wstrust_get_token_type(r),
 			STS_WSTRUST_REQUEST_TYPE_DEFAULT, sts_wstrust_get_applies_to(r),
 			STS_WSTRUST_KEY_TYPE_DEFAULT);
 
-	int auth = sts_wstrust_get_endpoint_auth(r);
+	auth = sts_wstrust_get_endpoint_auth(r);
+
 	if (auth != STS_ENDPOINT_AUTH_NONE) {
-		sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
-				r->server->module_config, &sts_module);
+
 		if (auth == STS_ENDPOINT_AUTH_BASIC) {
+
 			const char *username = sts_get_config_method_option(r,
 					cfg->wstrust_endpoint_auth_options,
 					STS_ENDPOINT_AUTH_BASIC_STR,
@@ -279,11 +284,14 @@ apr_byte_t sts_exec_wstrust(request_rec *r, const char *token, char **rtoken) {
 				return FALSE;
 			}
 			basic_auth = apr_psprintf(r->pool, "%s:%s", username, password);
+
 		} else if (auth == STS_ENDPOINT_AUTH_CLIENT_CERT) {
+
 			if (sts_get_endpoint_auth_cert_key(r,
 					cfg->wstrust_endpoint_auth_options, &client_cert,
 					&client_key) == FALSE)
 				return FALSE;
+
 		}
 	}
 
@@ -297,8 +305,8 @@ apr_byte_t sts_exec_wstrust(request_rec *r, const char *token, char **rtoken) {
 
 	xmlInitParser();
 
-	const xmlChar *xpath_expr = (const xmlChar *) apr_psprintf(r->pool,
-			xpath_expr_template, sts_wstrust_get_token_type(r));
+	xpath_expr = (const xmlChar *) apr_psprintf(r->pool, xpath_expr_template,
+			sts_wstrust_get_token_type(r));
 
 	if (sts_execute_xpath_expression(r, response, xpath_expr, rtoken) < 0) {
 		sts_error(r, "sts_execute_xpath_expression failed!");

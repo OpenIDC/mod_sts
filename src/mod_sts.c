@@ -1025,13 +1025,15 @@ apr_byte_t sts_get_oauth_endpoint_auth(request_rec *r, int auth,
 
 apr_byte_t sts_util_token_exchange(request_rec *r, const char *token,
 		char **rtoken) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
 	int mode = sts_get_mode(r);
 	if (mode == STS_CONFIG_MODE_WSTRUST)
-		return sts_exec_wstrust(r, token, rtoken);
+		return sts_exec_wstrust(r, cfg, token, rtoken);
 	if (mode == STS_CONFIG_MODE_ROPC)
-		return sts_exec_ropc(r, token, rtoken);
+		return sts_exec_ropc(r, cfg, token, rtoken);
 	if (mode == STS_CONFIG_MODE_OTX)
-		return sts_exec_otx(r, token, rtoken);
+		return sts_exec_otx(r, cfg, token, rtoken);
 	sts_error(r, "unknown STS mode %d", mode);
 	return FALSE;
 }
