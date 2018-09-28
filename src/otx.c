@@ -105,11 +105,16 @@ apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
 	if (strcmp(resource, "") != 0)
 		apr_table_addn(params, STS_OTX_RESOURCE_NAME, resource);
 	apr_table_addn(params, STS_OTX_SUBJECT_TOKEN_NAME, token);
+	// TODO: get this from the extra request params (default)
 	apr_table_addn(params, STS_OTX_SUBJECT_TOKEN_TYPE_NAME,
 			STS_OTX_SUBJECT_TOKEN_TYPE_VALUE);
 	// TODO: this is not really specified...
 	if (sts_otx_get_endpoint_auth(r) == STS_ENDPOINT_AUTH_NONE)
 		apr_table_addn(params, STS_OAUTH_CLIENT_ID, client_id);
+
+	if (cfg->oauth_tx_request_parameters != NULL)
+		params = apr_table_overlay(r->pool, cfg->oauth_tx_request_parameters,
+				params);
 
 	if (sts_get_oauth_endpoint_auth(r, sts_otx_get_endpoint_auth(r),
 			cfg->oauth_tx_endpoint_auth_options, sts_otx_get_endpoint(r),

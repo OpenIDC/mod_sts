@@ -1,4 +1,8 @@
 9/28/2018
+- support extra parameters to the OAuth 2.0 token exchange request via STSOTXRequestParameters
+- version 0.7.3
+
+9/28/2018
 - add client_id to OTX request if auth=none; some cleanups
 - version 0.7.2
 

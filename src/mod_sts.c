@@ -45,6 +45,7 @@
 
 // TODO: strip the source token from the propagated request? (optionally?)
 //       FWIW: the authorization header will be overwritten
+// TODO: see if token caching is correct wrt. different request parameters in per-directory context (need per-dir cache?)
 // TODO: check for a sane configuration at startup (and leave current localhost defaults to null)
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
@@ -376,6 +377,17 @@ static const char *sts_set_oauth_tx_endpoint_auth(cmd_parms *cmd, void *m,
 	return sts_set_method_options(cmd, arg, methods,
 			sts_get_allowed_endpoint_auth_methods, &cfg->oauth_tx_endpoint_auth,
 			&cfg->oauth_tx_endpoint_auth_options);
+}
+
+static const char *sts_set_oauth_tx_request_parameters(cmd_parms *cmd, void *m,
+		const char *arg) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			cmd->server->module_config, &sts_module);
+	if (cfg->oauth_tx_request_parameters == NULL)
+		cfg->oauth_tx_request_parameters = apr_table_make(cmd->pool, 2);
+	sts_util_read_form_encoded_params(cmd->pool,
+			cfg->oauth_tx_request_parameters, apr_pstrdup(cmd->pool, arg));
+	return NULL;
 }
 
 int sts_get_http_timeout(request_rec *r) {
@@ -1063,6 +1075,7 @@ void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth_tx_endpoint_auth = STS_CONFIG_POS_INT_UNSET;
 	c->oauth_tx_endpoint_auth_options = NULL;
 	c->oauth_tx_client_id = NULL;
+	c->oauth_tx_request_parameters = NULL;
 
 	c->cache_cfg = NULL;
 	//c->cache_shm_size_max = STS_CONFIG_POS_INT_UNSET;
@@ -1135,6 +1148,10 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->oauth_tx_client_id =
 			add->oauth_tx_client_id != NULL ?
 					add->oauth_tx_client_id : base->oauth_tx_client_id;
+	c->oauth_tx_request_parameters =
+			add->oauth_tx_request_parameters != NULL ?
+					add->oauth_tx_request_parameters :
+					base->oauth_tx_request_parameters;
 
 	c->cache_cfg = add->cache_cfg != NULL ? add->cache_cfg : base->cache_cfg;
 	//c->cache_shm_size_max = add->cache_shm_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_size_max : base->cache_shm_size_max;
@@ -1293,6 +1310,12 @@ static const command_rec sts_cmds[] = {
 				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_client_id),
 				RSRC_CONF,
 				"Set the Client ID for the OAuth 2.0 Token Exchange request."),
+		AP_INIT_ITERATE(
+				"STSOTXRequestParameters",
+				sts_set_oauth_tx_request_parameters,
+				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_request_parameters),
+				RSRC_CONF,
+				"Set extra request parameters to the token exchange request."),
 
 		AP_INIT_TAKE1(
 				"STSCacheExpiresIn",
