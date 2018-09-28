@@ -43,13 +43,11 @@
  *
  **************************************************************************/
 
-// TODO: add client_secret_jwt and private_key_jwt to the auth options of the OAuth-based STS methods
-//       they need cjose...
+// TODO: strip the source token from the propagated request? (optionally?)
+//       FWIW: the authorization header will be overwritten
 // TODO: check for a sane configuration at startup (and leave current localhost defaults to null)
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
-// TODO: strip the source token from the propagated request? (optionally?)
-//       FWIW: the authorization header will be overwritten
 // TOOD: ws-trust source tokens can only be presented as BinarySecurityToken's; should we support native SAML 2.0 etc.?
 #include "mod_sts.h"
 
