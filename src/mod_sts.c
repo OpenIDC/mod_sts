@@ -197,10 +197,6 @@ static void sts_set_config_method_options(cmd_parms *cmd,
 	if (options != NULL) {
 		apr_table_t *params = apr_table_make(cmd->pool, 8);
 		sts_util_read_form_encoded_params(cmd->pool, params, options);
-
-		sts_sdebug(cmd->server, "parsed: %d bytes into %d elements",
-				(int )strlen(options), apr_table_elts(params)->nelts);
-
 		if (*method_options == NULL)
 			*method_options = apr_hash_make(cmd->pool);
 		apr_hash_set(*method_options, type,
