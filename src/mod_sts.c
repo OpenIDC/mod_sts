@@ -43,6 +43,7 @@
  *
  **************************************************************************/
 
+// TODO: check input of parameters; perhaps use AP_INIT_ITERATE2
 // TODO: see if token caching is correct wrt. different request parameters in per-directory context (need per-dir cache?)
 // TODO: check for a sane configuration at startup (and leave current localhost defaults to null)
 // TODO: is the fixup handler the right place for the sts_handler

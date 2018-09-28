@@ -1,4 +1,8 @@
 9/28/2018
+- get subject_token_type request parameter from STSOTXRequestParameters
+- version 0.7.5
+
+9/28/2018
 - support stripping the source token from the outgoing request
 - version 0.7.4
 

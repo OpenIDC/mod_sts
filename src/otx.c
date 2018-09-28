@@ -81,6 +81,18 @@ static const char * sts_otx_get_client_id(request_rec *r) {
 	return cfg->oauth_tx_client_id;
 }
 
+static apr_table_t *sts_otx_get_request_parameters(request_rec *r) {
+	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
+			r->server->module_config, &sts_module);
+	if (cfg->oauth_tx_request_parameters == NULL) {
+		cfg->oauth_tx_request_parameters = apr_table_make(
+				r->server->process->pool, 2);
+		apr_table_set(cfg->oauth_tx_request_parameters,
+				STS_OTX_SUBJECT_TOKEN_TYPE_NAME,
+				STS_OTX_SUBJECT_TOKEN_TYPE_VALUE);
+	}
+	return cfg->oauth_tx_request_parameters;
+}
 apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
 		const char *token, char **rtoken) {
 
@@ -105,16 +117,12 @@ apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
 	if (strcmp(resource, "") != 0)
 		apr_table_addn(params, STS_OTX_RESOURCE_NAME, resource);
 	apr_table_addn(params, STS_OTX_SUBJECT_TOKEN_NAME, token);
-	// TODO: get this from the extra request params (default)
-	apr_table_addn(params, STS_OTX_SUBJECT_TOKEN_TYPE_NAME,
-			STS_OTX_SUBJECT_TOKEN_TYPE_VALUE);
 	// TODO: this is not really specified...
 	if (sts_otx_get_endpoint_auth(r) == STS_ENDPOINT_AUTH_NONE)
 		apr_table_addn(params, STS_OAUTH_CLIENT_ID, client_id);
 
-	if (cfg->oauth_tx_request_parameters != NULL)
-		params = apr_table_overlay(r->pool, cfg->oauth_tx_request_parameters,
-				params);
+	params = apr_table_overlay(r->pool, sts_otx_get_request_parameters(r),
+			params);
 
 	if (sts_get_oauth_endpoint_auth(r, sts_otx_get_endpoint_auth(r),
 			cfg->oauth_tx_endpoint_auth_options, sts_otx_get_endpoint(r),
