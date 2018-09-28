@@ -18,7 +18,7 @@ DISTFILES=$(SRC) \
 	README.md \
 	AUTHORS \
 	DISCLAIMER \
-	LICENSE.txt \
+	LICENSE \
 	ChangeLog
 
 all: src/mod_sts.la
