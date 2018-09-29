@@ -43,7 +43,6 @@
  *
  **************************************************************************/
 
-// TODO: check for a sane configuration at startup (and leave current localhost defaults to null)
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
 // TOOD: ws-trust source tokens can only be presented as BinarySecurityToken's; should we support native SAML 2.0 etc.?
@@ -127,8 +126,78 @@ static apr_status_t sts_cleanup_handler(void *data) {
 	return APR_SUCCESS;
 }
 
+static int sts_config_merged_vhost_configs_exist(server_rec *s) {
+	sts_server_config *cfg = NULL;
+	int rc = FALSE;
+	while (s != NULL) {
+		cfg = ap_get_module_config(s->module_config, &sts_module);
+		if (cfg->merged) {
+			rc = TRUE;
+			break;
+		}
+		s = s->next;
+	}
+	return rc;
+}
+
+int sts_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
+	sts_server_config *cfg = ap_get_module_config(s->module_config,
+			&sts_module);
+	int rc = OK;
+	switch (cfg->mode) {
+	case STS_CONFIG_MODE_WSTRUST:
+		rc = sts_wstrust_config_check_vhost(pool, s, cfg);
+		break;
+	case STS_CONFIG_MODE_ROPC:
+		rc = sts_ropc_config_check_vhost(pool, s, cfg);
+		break;
+	case STS_CONFIG_MODE_OTX:
+		rc = sts_otx_config_check_vhost(pool, s, cfg);
+		break;
+	default:
+		sts_serror(s, "STS mode is set to unsupported value: %d", cfg->mode);
+		rc = HTTP_INTERNAL_SERVER_ERROR;
+		break;
+
+	}
+	return rc;
+}
+
+static int sts_config_check_merged_vhost_configs(apr_pool_t *pool,
+		server_rec *s) {
+	sts_server_config *cfg = NULL;
+	int rc = OK;
+	while (s != NULL) {
+		cfg = ap_get_module_config(s->module_config, &sts_module);
+		if (cfg->merged) {
+			rc = sts_config_check_vhost_config(pool, s);
+			if (rc != OK) {
+				break;
+			}
+		}
+		s = s->next;
+	}
+	return rc;
+}
+
 static int sts_post_config_handler(apr_pool_t *pool, apr_pool_t *p1,
 		apr_pool_t *p2, server_rec *s) {
+
+	const char *userdata_key = "sts_post_config";
+	void *data = NULL;
+
+	/* Since the post_config hook is invoked twice (once
+	 * for 'sanity checking' of the config and once for
+	 * the actual server launch, we have to use a hack
+	 * to not run twice
+	 */
+	apr_pool_userdata_get(&data, userdata_key, s->process->pool);
+	if (data == NULL) {
+		apr_pool_userdata_set((const void *) 1, userdata_key,
+				apr_pool_cleanup_null, s->process->pool);
+		return OK;
+	}
+
 	sts_sinfo(s, "%s - init", NAMEVERSION);
 	apr_pool_cleanup_register(pool, s, sts_cleanup_handler,
 			apr_pool_cleanup_null);
@@ -140,7 +209,24 @@ static int sts_post_config_handler(apr_pool_t *pool, apr_pool_t *p1,
 		sp = sp->next;
 	}
 
-	return OK;
+	/*
+	 * Apache has a base vhost that true vhosts derive from.
+	 * There are two startup scenarios:
+	 *
+	 * 1. Only the base vhost contains OIDC settings.
+	 *    No server configs have been merged.
+	 *    Only the base vhost needs to be checked.
+	 *
+	 * 2. The base vhost contains zero or more OIDC settings.
+	 *    One or more vhosts override these.
+	 *    These vhosts have a merged config.
+	 *    All merged configs need to be checked.
+	 */
+	if (!sts_config_merged_vhost_configs_exist(s)) {
+		/* nothing merged, only check the base vhost */
+		return sts_config_check_vhost_config(pool, s);
+	}
+	return sts_config_check_merged_vhost_configs(pool, s);
 }
 
 static void sts_child_init(apr_pool_t *p, server_rec *s) {
@@ -1052,11 +1138,11 @@ apr_byte_t sts_util_token_exchange(request_rec *r, const char *token,
 			r->server->module_config, &sts_module);
 	int mode = sts_get_mode(r);
 	if (mode == STS_CONFIG_MODE_WSTRUST)
-		return sts_exec_wstrust(r, cfg, token, rtoken);
+		return sts_wstrust_exec(r, cfg, token, rtoken);
 	if (mode == STS_CONFIG_MODE_ROPC)
-		return sts_exec_ropc(r, cfg, token, rtoken);
+		return sts_ropc_exec(r, cfg, token, rtoken);
 	if (mode == STS_CONFIG_MODE_OTX)
-		return sts_exec_otx(r, cfg, token, rtoken);
+		return sts_otx_exec(r, cfg, token, rtoken);
 	sts_error(r, "unknown STS mode %d", mode);
 	return FALSE;
 }
@@ -1064,6 +1150,7 @@ apr_byte_t sts_util_token_exchange(request_rec *r, const char *token,
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	sts_server_config *c = apr_pcalloc(pool, sizeof(sts_server_config));
 
+	c->merged = FALSE;
 	c->mode = STS_CONFIG_POS_INT_UNSET;
 	c->ssl_validation = STS_CONFIG_POS_INT_UNSET;
 	c->http_timeout = STS_CONFIG_POS_INT_UNSET;
@@ -1100,6 +1187,7 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	sts_server_config *base = BASE;
 	sts_server_config *add = ADD;
 
+	c->merged = TRUE;
 	c->mode = add->mode != STS_CONFIG_POS_INT_UNSET ? add->mode : base->mode;
 	c->ssl_validation =
 			add->ssl_validation != STS_CONFIG_POS_INT_UNSET ?
@@ -1223,136 +1311,136 @@ static void sts_register_hooks(apr_pool_t *p) {
 static const command_rec sts_cmds[] = {
 
 		AP_INIT_FLAG(
-				"STSEnabled",
+				STSEnabled,
 				ap_set_flag_slot,
 				(void*)APR_OFFSETOF(sts_dir_config, enabled),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Enable or disable mod_sts."),
 
 		AP_INIT_TAKE1(
-				"STSMode",
+				STSMode,
 				sts_set_mode,
 				(void*)APR_OFFSETOF(sts_server_config, mode),
 				RSRC_CONF,
 				"Set STS mode to \"" STS_CONFIG_MODE_WSTRUST_STR "\", \"" STS_CONFIG_MODE_ROPC_STR "\" or \"" STS_CONFIG_MODE_OTX_STR "\"."),
 		AP_INIT_FLAG(
-				"STSSSLValidateServer",
+				STSSSLValidateServer,
 				sts_set_flag_slot,
 				(void*)APR_OFFSETOF(sts_server_config, ssl_validation),
 				RSRC_CONF,
 				"Enable or disable SSL server certificate validation for calls to the STS."),
 		AP_INIT_TAKE1(
-				"STSHTTPTimeOut",
+				STSHTTPTimeOut,
 				sts_set_int_slot,
 				(void*)APR_OFFSETOF(sts_server_config, http_timeout),
 				RSRC_CONF,
 				"Timeout for calls to the STS."),
 
 		AP_INIT_TAKE12(
-				"STSRequestParameter",
+				STSRequestParameter,
 				sts_set_request_parameter,
 				(void*)APR_OFFSETOF(sts_dir_config, request_parameters),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Set extra request parameters for the token exchange request."),
 
 		AP_INIT_TAKE1(
-				"STSWSTrustEndpoint",
+				STSWSTrustEndpoint,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_endpoint),
 				RSRC_CONF,
 				"Set the WS-Trust STS endpoint."),
 		AP_INIT_TAKE1(
-				"STSWSTrustEndpointAuth",
+				STSWSTrustEndpointAuth,
 				sts_set_wstrust_endpoint_auth,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_endpoint_auth),
 				RSRC_CONF,
 				"Configure how this module authenticates to the WS-Trust Endpoint."),
 		AP_INIT_TAKE1(
-				"STSWSTrustAppliesTo",
+				STSWSTrustAppliesTo,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_applies_to),
 				RSRC_CONF,
 				"Set the WS-Trust AppliesTo value."),
 		AP_INIT_TAKE1(
-				"STSWSTrustTokenType",
+				STSWSTrustTokenType,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_token_type),
 				RSRC_CONF,
 				"Set the WS-Trust Token Type."),
 		AP_INIT_TAKE1(
-				"STSWSTrustValueType",
+				STSWSTrustValueType,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_value_type),
 				RSRC_CONF,
 				"Set the WS-Trust Value Type."),
 
 		AP_INIT_TAKE1(
-				"STSROPCEndpoint",
+				STSROPCEndpoint,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, ropc_endpoint),
 				RSRC_CONF,
 				"Set the OAuth 2.0 ROPC Token Endpoint."),
 		AP_INIT_TAKE1(
-				"STSROPCEndpointAuth",
+				STSROPCEndpointAuth,
 				sts_set_ropc_endpoint_auth,
 				(void*)APR_OFFSETOF(sts_server_config, ropc_endpoint_auth),
 				RSRC_CONF,
 				"Configure how this module authenticates to the ROPC Endpoint."),
 		AP_INIT_TAKE1(
-				"STSROPCClientID",
+				STSROPCClientID,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, ropc_client_id),
 				RSRC_CONF,
 				"Set the Client ID for the OAuth 2.0 ROPC token request."),
 		AP_INIT_TAKE1(
-				"STSROPCUsername",
+				STSROPCUsername,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, ropc_username),
 				RSRC_CONF,
 				"Set the username to be used in the OAuth 2.0 ROPC token request; if left empty the client_id will be passed in the username parameter."),
 
 		AP_INIT_TAKE1(
-				"STSOTXEndpoint",
+				STSOTXEndpoint,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, otx_endpoint),
 				RSRC_CONF,
 				"Set the OAuth 2.0 Token Exchange Endpoint."),
 		AP_INIT_TAKE1(
-				"STSOTXEndpointAuth",
+				STSOTXEndpointAuth,
 				sts_set_otx_endpoint_auth,
 				(void*)APR_OFFSETOF(sts_server_config, otx_endpoint_auth),
 				RSRC_CONF,
 				"Configure how this module authenticates to the OAuth 2.0 Token Exchange Endpoint."),
 		AP_INIT_TAKE1(
-				"STSOTXClientID",
+				STSOTXClientID,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, otx_client_id),
 				RSRC_CONF,
 				"Set the Client ID for the OAuth 2.0 Token Exchange request."),
 
 		AP_INIT_TAKE1(
-				"STSCacheExpiresIn",
+				STSCacheExpiresIn,
 				ap_set_int_slot,
 				(void*)APR_OFFSETOF(sts_dir_config, cache_expires_in),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Set the cache expiry for access tokens in seconds."),
 
 		AP_INIT_ITERATE(
-				"STSAcceptSourceTokenIn",
+				STSAcceptSourceTokenIn,
 				sts_set_accept_source_token_in,
 				(void*)APR_OFFSETOF(sts_dir_config, accept_source_token_in),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Configure how the source token may be presented."),
 
 		AP_INIT_FLAG(
-				"STSStripSourceToken",
+				STSStripSourceToken,
 				ap_set_flag_slot,
 				(void*)APR_OFFSETOF(sts_dir_config, strip_source_token),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Enable or disable stripping of the source token from the outgoing request."),
 
 		AP_INIT_ITERATE(
-				"STSSetTargetTokenIn",
+				STSSetTargetTokenIn,
 				sts_set_set_target_token_in,
 				(void*)APR_OFFSETOF(sts_dir_config, set_target_token_in),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,

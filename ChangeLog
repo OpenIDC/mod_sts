@@ -1,4 +1,8 @@
 9/29/2018
+- set defaults to NULL and do per-mode configuration checks on startup
+- version 0.9.1
+
+9/29/2018
 - remove STSROPCRequestParameter, STSOTXRequestParameter and STSResource; merge into STSRequestParameter
 - version 0.9.0
 

@@ -128,7 +128,30 @@ extern const int STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
 #define STS_OAUTH_GRANT_TYPE                       "grant_type"
 #define STS_OAUTH_ACCESS_TOKEN                     "access_token"
 
+#define STSEnabled                                 "STSEnabled"
+#define STSMode                                    "STSMode"
+#define STSSSLValidateServer                       "STSSSLValidateServer"
+#define STSHTTPTimeOut                             "STSHTTPTimeOut"
+#define STSRequestParameter                        "STSRequestParameter"
+#define STSWSTrustEndpoint                         "STSWSTrustEndpoint"
+#define STSWSTrustEndpointAuth                     "STSWSTrustEndpointAuth"
+#define STSWSTrustAppliesTo                        "STSWSTrustAppliesTo"
+#define STSWSTrustTokenType                        "STSWSTrustTokenType"
+#define STSWSTrustValueType                        "STSWSTrustValueType"
+#define STSROPCEndpoint                            "STSROPCEndpoint"
+#define STSROPCEndpointAuth                        "STSROPCEndpointAuth"
+#define STSROPCClientID                            "STSROPCClientID"
+#define STSROPCUsername                            "STSROPCUsername"
+#define STSOTXEndpoint                             "STSOTXEndpoint"
+#define STSOTXEndpointAuth                         "STSOTXEndpointAuth"
+#define STSOTXClientID                             "STSOTXClientID"
+#define STSCacheExpiresIn                          "STSCacheExpiresIn"
+#define STSAcceptSourceTokenIn                     "STSAcceptSourceTokenIn"
+#define STSStripSourceToken                        "STSStripSourceToken"
+#define STSSetTargetTokenIn                        "STSSetTargetTokenIn"
+
 typedef struct {
+	apr_byte_t merged;
 	int mode;
 	int ssl_validation;
 	int http_timeout;
@@ -170,14 +193,24 @@ typedef struct {
 
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr);
 void *sts_create_dir_config(apr_pool_t *pool, char *path);
+int sts_config_check_vhost_config(apr_pool_t *pool, server_rec *s);
 
 apr_byte_t sts_util_token_exchange(request_rec *r, const char *token,
 		char **rtoken);
-apr_byte_t sts_exec_wstrust(request_rec *r, sts_server_config *cfg,
+
+int sts_wstrust_config_check_vhost(apr_pool_t *pool, server_rec *s,
+		sts_server_config *cfg);
+apr_byte_t sts_wstrust_exec(request_rec *r, sts_server_config *cfg,
 		const char *token, char **rtoken);
-apr_byte_t sts_exec_ropc(request_rec *r, sts_server_config *cfg,
+
+int sts_ropc_config_check_vhost(apr_pool_t *pool, server_rec *s,
+		sts_server_config *cfg);
+apr_byte_t sts_ropc_exec(request_rec *r, sts_server_config *cfg,
 		const char *token, char **rtoken);
-apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
+
+int sts_otx_config_check_vhost(apr_pool_t *pool, server_rec *s,
+		sts_server_config *cfg);
+apr_byte_t sts_otx_exec(request_rec *r, sts_server_config *cfg,
 		const char *token, char **rtoken);
 
 int sts_cache_shm_post_config(server_rec *s);

@@ -89,7 +89,12 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	sts_server_config *cfg = sts_create_server_config(request->pool,
 			request->server);
 	cfg->ssl_validation = 0;
-	//cfg->mode = 1;
+	cfg->mode = 0;
+	cfg->wstrust_endpoint = "https://localhost:9031/pf/sts.wst";
+	cfg->wstrust_applies_to = "localhost:default:entityId";
+	cfg->wstrust_token_type = "urn:bogus:token";
+	cfg->wstrust_value_type =
+			"urn:pingidentity.com:oauth2:grant_type:validate_bearer";
 
 	sts_dir_config *d_cfg = sts_create_dir_config(request->pool, NULL);
 	d_cfg->enabled = 1;
@@ -111,13 +116,18 @@ int main(int argc, char **argv, char **env) {
 		return -1;
 	}
 
+	if (argc < 2) {
+		printf(" Usage: %s <access_token>\n", argv[0]);
+		exit(-1);
+	}
+
 	apr_pool_t *pool = NULL;
 	apr_pool_create(&pool, NULL);
 
 	request_rec *r = test_setup(pool);
 
-	if (argc < 2) {
-		printf(" Usage: %s <access_token>\n", argv[0]);
+	if (sts_config_check_vhost_config(pool, r->server) != OK) {
+		printf("configuration error\n");
 		exit(-1);
 	}
 

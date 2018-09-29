@@ -45,14 +45,27 @@
 
 #include "mod_sts.h"
 
-#define STS_ROPC_ENDPOINT_DEFAULT          "https://localhost:9031/as/token.oauth2"
-#define STS_ROPC_ENDPOINT_AUTH_DEFAULT      STS_ENDPOINT_AUTH_NONE
-#define STS_ROPC_CLIENT_ID_DEFAULT          "mod_sts"
-#define STS_ROPC_USERNAME_DEFAULT           NULL
+#define STS_ROPC_ENDPOINT_DEFAULT          NULL
+#define STS_ROPC_ENDPOINT_AUTH_DEFAULT     STS_ENDPOINT_AUTH_NONE
+#define STS_ROPC_CLIENT_ID_DEFAULT         NULL
+#define STS_ROPC_USERNAME_DEFAULT          NULL
 
 #define STS_ROPC_GRANT_TYPE_VALUE "password"
 #define STS_ROPC_USERNAME         "username"
 #define STS_ROPC_PASSWORD         "password"
+
+int sts_ropc_config_check_vhost(apr_pool_t *pool, server_rec *s,
+		sts_server_config *cfg) {
+	if (cfg->ropc_endpoint == NULL) {
+		sts_serror(s, STSROPCEndpoint " must be set in ROPC mode");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+	if (cfg->ropc_client_id == NULL) {
+		sts_serror(s, STSROPCClientID " must be set in ROPC mode");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+	return OK;
+}
 
 static const char * sts_ropc_get_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
@@ -96,7 +109,7 @@ static apr_table_t *sts_ropc_merge_request_parameters(request_rec *r,
 			params;
 }
 
-apr_byte_t sts_exec_ropc(request_rec *r, sts_server_config *cfg,
+apr_byte_t sts_ropc_exec(request_rec *r, sts_server_config *cfg,
 		const char *token, char **rtoken) {
 
 	apr_byte_t rv = FALSE;

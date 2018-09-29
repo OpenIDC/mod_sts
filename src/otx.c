@@ -45,9 +45,10 @@
 
 #include "mod_sts.h"
 
-#define STS_OTX_ENDPOINT_DEFAULT         "https://localhost:9031/as/token.oauth2"
+//#define STS_OTX_ENDPOINT_DEFAULT         "https://localhost:9031/as/token.oauth2"
+#define STS_OTX_ENDPOINT_DEFAULT         NULL
 #define STS_OTX_ENDPOINT_AUTH_DEFAULT    STS_ENDPOINT_AUTH_NONE
-#define STS_OTX_CLIENT_ID_DEFAULT        "mod_sts"
+#define STS_OTX_CLIENT_ID_DEFAULT        NULL
 
 #define STS_OTX_GRANT_TYPE_NAME          "grant_type"
 #define STS_OTX_GRANT_TYPE_VALUE         "urn:ietf:params:oauth:grant-type:token-exchange"
@@ -55,6 +56,16 @@
 #define STS_OTX_SUBJECT_TOKEN_TYPE_NAME  "subject_token_type"
 #define STS_OTX_SUBJECT_TOKEN_TYPE_VALUE "urn:ietf:params:oauth:token-type:access_token"
 #define STS_OTX_ACCESS_TOKEN             "access_token"
+
+int sts_otx_config_check_vhost(apr_pool_t *pool, server_rec *s,
+		sts_server_config *cfg) {
+	if (cfg->otx_endpoint == NULL) {
+		sts_serror(s,
+				STSOTXEndpoint " must be set in OAuth 2.0 Token Exchange mode");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+	return OK;
+}
 
 static const char * sts_otx_get_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
@@ -94,7 +105,7 @@ static apr_table_t *sts_otx_merge_request_parameters(request_rec *r,
 	return apr_table_overlay(r->pool, dir_cfg->request_parameters, params);
 }
 
-apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
+apr_byte_t sts_otx_exec(request_rec *r, sts_server_config *cfg,
 		const char *token, char **rtoken) {
 
 	apr_byte_t rv = FALSE;
@@ -112,7 +123,8 @@ apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
 			STS_OTX_GRANT_TYPE_VALUE);
 	apr_table_addn(params, STS_OTX_SUBJECT_TOKEN_NAME, token);
 	// TODO: this is not really specified...
-	if (sts_otx_get_endpoint_auth(r) == STS_ENDPOINT_AUTH_NONE)
+	if ((sts_otx_get_endpoint_auth(r) == STS_ENDPOINT_AUTH_NONE)
+			&& (client_id != NULL))
 		apr_table_addn(params, STS_OAUTH_CLIENT_ID, client_id);
 
 	params = sts_otx_merge_request_parameters(r, params);

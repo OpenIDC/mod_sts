@@ -54,11 +54,11 @@
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 
-#define STS_WSTRUST_ENDPOINT_DEFAULT        "https://localhost:9031/pf/sts.wst"
+#define STS_WSTRUST_ENDPOINT_DEFAULT        NULL
 #define STS_WSTRUST_ENDPOINT_AUTH_DEFAULT   STS_ENDPOINT_AUTH_NONE
-#define STS_WSTRUST_APPLIES_TO_DEFAULT     "localhost:default:entityId"
-#define STS_WSTRUST_TOKEN_TYPE_DEFAULT     "urn:bogus:token"
-//#define STS_WSTRUST_TOKEN_TYPE_DEFAULT      "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0"
+#define STS_WSTRUST_APPLIES_TO_DEFAULT      NULL
+#define STS_WSTRUST_TOKEN_TYPE_DEFAULT     "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0"
+#define STS_WSTRUST_VALUE_TYPE_DEFAULT      "urn:pingidentity.com:oauth2:grant_type:validate_bearer"
 
 #define STS_WSTRUST_XML_SOAP_NS				"http://www.w3.org/2003/05/soap-envelope"
 #define STS_WSTRUST_XML_WSTRUST_NS			"http://docs.oasis-open.org/ws-sx/ws-trust/200512"
@@ -67,10 +67,30 @@
 #define STS_WSTRUST_XML_WSA_NS				"http://www.w3.org/2005/08/addressing"
 #define STS_WSTRUST_XML_WSP_NS				"http://schemas.xmlsoap.org/ws/2004/09/policy"
 
-#define STS_WSTRUST_ACTION_DEFAULT          STS_WSTRUST_XML_WSTRUST_NS "/RST/Issue"
-#define STS_WSTRUST_REQUEST_TYPE_DEFAULT    STS_WSTRUST_XML_WSTRUST_NS "/Issue"
-#define STS_WSTRUST_KEY_TYPE_DEFAULT        STS_WSTRUST_XML_WSTRUST_NS "/SymmetricKey"
-#define STS_WSTRUST_VALUE_TYPE_DEFAULT      "urn:pingidentity.com:oauth2:grant_type:validate_bearer"
+#define STS_WSTRUST_ACTION                  STS_WSTRUST_XML_WSTRUST_NS "/RST/Issue"
+#define STS_WSTRUST_REQUEST_TYPE            STS_WSTRUST_XML_WSTRUST_NS "/Issue"
+#define STS_WSTRUST_KEY_TYPE                STS_WSTRUST_XML_WSTRUST_NS "/SymmetricKey"
+
+int sts_wstrust_config_check_vhost(apr_pool_t *pool, server_rec *s,
+		sts_server_config *cfg) {
+	if (cfg->wstrust_endpoint == NULL) {
+		sts_serror(s, STSWSTrustEndpoint " must be set in WS-Trust mode");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+	if (cfg->wstrust_applies_to == NULL) {
+		sts_serror(s, STSWSTrustAppliesTo " must be set in WS-Trust mode");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+	if (cfg->wstrust_token_type == NULL) {
+		sts_serror(s, STSWSTrustTokenType " must be set in WS-Trust mode");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+	if (cfg->wstrust_value_type == NULL) {
+		sts_serror(s, STSWSTrustValueType " must be set in WS-Trust mode");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+	return OK;
+}
 
 static const char * sts_wstrust_get_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
@@ -215,14 +235,14 @@ int sts_execute_xpath_expression(request_rec *r, const char* xmlStr,
 	return (0);
 }
 
-static const char *xpath_expr_template = "/s:Envelope"
+static const char *sts_wstrust_xpath_expr_template = "/s:Envelope"
 		"/s:Body"
 		"/wst:RequestSecurityTokenResponseCollection"
 		"/wst:RequestSecurityTokenResponse"
 		"/wst:RequestedSecurityToken"
 		"/wsse:BinarySecurityToken[@ValueType='%s']";
 
-apr_byte_t sts_exec_wstrust(request_rec *r, sts_server_config *cfg,
+apr_byte_t sts_wstrust_exec(request_rec *r, sts_server_config *cfg,
 		const char *token, char **rtoken) {
 
 	char *response = NULL;
@@ -257,10 +277,10 @@ apr_byte_t sts_exec_wstrust(request_rec *r, sts_server_config *cfg,
 
 	data = apr_psprintf(r->pool, ws_trust_soap_call_template, id1, created,
 			expires, id2, sts_wstrust_get_value_type(r), b64,
-			sts_wstrust_get_endpoint(r), STS_WSTRUST_ACTION_DEFAULT,
+			sts_wstrust_get_endpoint(r), STS_WSTRUST_ACTION,
 			sts_wstrust_get_token_type(r),
-			STS_WSTRUST_REQUEST_TYPE_DEFAULT, sts_wstrust_get_applies_to(r),
-			STS_WSTRUST_KEY_TYPE_DEFAULT);
+			STS_WSTRUST_REQUEST_TYPE, sts_wstrust_get_applies_to(r),
+			STS_WSTRUST_KEY_TYPE);
 
 	auth = sts_wstrust_get_endpoint_auth(r);
 
@@ -310,8 +330,8 @@ apr_byte_t sts_exec_wstrust(request_rec *r, sts_server_config *cfg,
 
 	xmlInitParser();
 
-	xpath_expr = (const xmlChar *) apr_psprintf(r->pool, xpath_expr_template,
-			sts_wstrust_get_token_type(r));
+	xpath_expr = (const xmlChar *) apr_psprintf(r->pool,
+			sts_wstrust_xpath_expr_template, sts_wstrust_get_token_type(r));
 
 	if (sts_execute_xpath_expression(r, response, xpath_expr, rtoken) < 0) {
 		sts_error(r, "sts_execute_xpath_expression failed!");
