@@ -373,13 +373,15 @@ static const char *sts_set_oauth_tx_endpoint_auth(cmd_parms *cmd, void *m,
 			&cfg->oauth_tx_endpoint_auth_options);
 }
 
-static const char *sts_set_oauth_tx_request_parameter(cmd_parms *cmd, void *m,
+static const char *sts_set_oauth_request_parameter(cmd_parms *cmd, void *m,
 		const char *arg1, const char *arg2) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			cmd->server->module_config, &sts_module);
-	if (cfg->oauth_tx_request_parameters == NULL)
-		cfg->oauth_tx_request_parameters = apr_table_make(cmd->pool, 2);
-	apr_table_add(cfg->oauth_tx_request_parameters, arg1, arg2);
+	int offset = (int) (long) cmd->info;
+	apr_table_t **table = (apr_table_t **) ((char *) cfg + offset);
+	if (*table == NULL)
+		*table = apr_table_make(cmd->pool, 2);
+	apr_table_add(*table, arg1, arg2);
 	return NULL;
 }
 
@@ -1325,6 +1327,12 @@ static const command_rec sts_cmds[] = {
 				(void*)APR_OFFSETOF(sts_server_config, ropc_username),
 				RSRC_CONF,
 				"Set the username to be used in the OAuth 2.0 ROPC token request; if left empty the client_id will be passed in the username parameter."),
+		AP_INIT_TAKE12(
+				"STSROPCRequestParameter",
+				sts_set_oauth_request_parameter,
+				(void*)APR_OFFSETOF(sts_server_config, ropc_request_parameters),
+				RSRC_CONF,
+				"Set extra request parameters to the token request."),
 
 		AP_INIT_TAKE1(
 				"STSOTXEndpoint",
@@ -1346,7 +1354,7 @@ static const command_rec sts_cmds[] = {
 				"Set the Client ID for the OAuth 2.0 Token Exchange request."),
 		AP_INIT_TAKE12(
 				"STSOTXRequestParameter",
-				sts_set_oauth_tx_request_parameter,
+				sts_set_oauth_request_parameter,
 				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_request_parameters),
 				RSRC_CONF,
 				"Set extra request parameters to the token exchange request."),

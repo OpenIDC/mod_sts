@@ -145,6 +145,7 @@ typedef struct {
 	apr_hash_t *ropc_endpoint_auth_options;
 	char *ropc_client_id;
 	char *ropc_username;
+	apr_table_t *ropc_request_parameters;
 
 	char *oauth_tx_endpoint;
 	int oauth_tx_endpoint_auth;

@@ -93,23 +93,20 @@ static apr_table_t *sts_otx_get_request_parameters(request_rec *r) {
 	}
 	return cfg->oauth_tx_request_parameters;
 }
+
 apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
 		const char *token, char **rtoken) {
 
 	apr_byte_t rv = FALSE;
 	char *response = NULL;
 	char *basic_auth = NULL;
-	const char *resource = NULL;
 	apr_table_t *params = NULL;
 	json_t *result = NULL;
 	const char *client_cert = NULL, *client_key = NULL;
 	const char *client_id = sts_otx_get_client_id(r);
+	const char *resource = sts_get_resource(r);
 
 	sts_debug(r, "enter");
-
-	resource = sts_get_resource(r);
-	if (resource == NULL)
-		resource = sts_util_get_current_url(r);
 
 	params = apr_table_make(r->pool, 4);
 	apr_table_addn(params, STS_OTX_GRANT_TYPE_NAME,
