@@ -1,4 +1,8 @@
 9/29/2018
+- remove STSROPCRequestParameter, STSOTXRequestParameter and STSResource; merge into STSRequestParameter
+- version 0.9.0
+
+9/29/2018
 - correct resource->aud handling for ROPC flows and add extra params with STSROPCRequestParameter
 - version 0.8.1
 

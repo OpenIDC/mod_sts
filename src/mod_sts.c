@@ -43,7 +43,6 @@
  *
  **************************************************************************/
 
-// TODO: see if we need to remove STSRequest and leave it to the *RequestParam setting
 // TODO: check for a sane configuration at startup (and leave current localhost defaults to null)
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
@@ -374,15 +373,12 @@ static const char *sts_set_otx_endpoint_auth(cmd_parms *cmd, void *m,
 			&cfg->otx_endpoint_auth_options);
 }
 
-static const char *sts_set_oauth_request_parameter(cmd_parms *cmd, void *m,
+static const char *sts_set_request_parameter(cmd_parms *cmd, void *m,
 		const char *arg1, const char *arg2) {
-	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
-			cmd->server->module_config, &sts_module);
-	int offset = (int) (long) cmd->info;
-	apr_table_t **table = (apr_table_t **) ((char *) cfg + offset);
-	if (*table == NULL)
-		*table = apr_table_make(cmd->pool, 2);
-	apr_table_add(*table, arg1, arg2);
+	sts_dir_config *dir_cfg = (sts_dir_config *) m;
+	if (dir_cfg->request_parameters == NULL)
+		dir_cfg->request_parameters = apr_table_make(cmd->pool, 2);
+	apr_table_add(dir_cfg->request_parameters, arg1, arg2);
 	return NULL;
 }
 
@@ -449,17 +445,6 @@ static int sts_get_set_target_token_in(request_rec *r) {
 	if (dir_cfg->set_target_token_in == STS_CONFIG_POS_INT_UNSET)
 		return STS_DEFAULT_SET_TARGET_TOKEN_IN;
 	return dir_cfg->set_target_token_in;
-}
-
-const char * sts_get_resource(request_rec *r) {
-	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&sts_module);
-	char *rv = dir_cfg->resource;
-	if (rv == NULL)
-		rv = dir_cfg->path;
-	if (rv == NULL)
-		rv = sts_util_get_current_url(r);
-	return rv;
 }
 
 const char *sts_get_config_method_option(request_rec *r,
@@ -743,6 +728,8 @@ static int sts_set_target_token(request_rec *r, char *target_token) {
 static int sts_handler(request_rec *r) {
 	char *target_token = NULL, *cache_key = NULL;
 	const char *source_token = NULL;
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
 
 	sts_debug(r, "enter");
 
@@ -755,8 +742,7 @@ static int sts_handler(request_rec *r) {
 	if (source_token == NULL)
 		return DECLINED;
 
-	cache_key = apr_psprintf(r->pool, "%s:%s", sts_get_resource(r),
-			source_token);
+	cache_key = apr_psprintf(r->pool, "%s:%s", dir_cfg->path, source_token);
 	sts_cache_shm_get(r, STS_CACHE_SECTION, cache_key, &target_token);
 
 	if (target_token == NULL) {
@@ -1100,7 +1086,6 @@ void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->otx_endpoint_auth = STS_CONFIG_POS_INT_UNSET;
 	c->otx_endpoint_auth_options = NULL;
 	c->otx_client_id = NULL;
-	c->otx_request_parameters = NULL;
 
 	c->cache_cfg = NULL;
 	//c->cache_shm_size_max = STS_CONFIG_POS_INT_UNSET;
@@ -1172,9 +1157,6 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->otx_client_id =
 			add->otx_client_id != NULL ?
 					add->otx_client_id : base->otx_client_id;
-	c->otx_request_parameters =
-			add->otx_request_parameters != NULL ?
-					add->otx_request_parameters : base->otx_request_parameters;
 
 	c->cache_cfg = add->cache_cfg != NULL ? add->cache_cfg : base->cache_cfg;
 	//c->cache_shm_size_max = add->cache_shm_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_size_max : base->cache_shm_size_max;
@@ -1191,7 +1173,7 @@ void *sts_create_dir_config(apr_pool_t *pool, char *path) {
 	c->strip_source_token = STS_CONFIG_POS_INT_UNSET;
 	c->set_target_token_in = STS_CONFIG_POS_INT_UNSET;
 	c->set_target_token_in_options = NULL;
-	c->resource = NULL;
+	c->request_parameters = NULL;
 	c->path = apr_pstrdup(pool, path);
 	return c;
 }
@@ -1223,7 +1205,9 @@ static void *sts_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->set_target_token_in_options != NULL ?
 					add->set_target_token_in_options :
 					base->set_target_token_in_options;
-	c->resource = add->resource != NULL ? add->resource : base->resource;
+	c->request_parameters =
+			add->request_parameters != NULL ?
+					add->request_parameters : base->request_parameters;
 	c->path = add->path != NULL ? add->path : base->path;
 	return c;
 }
@@ -1264,12 +1248,12 @@ static const command_rec sts_cmds[] = {
 				RSRC_CONF,
 				"Timeout for calls to the STS."),
 
-		AP_INIT_TAKE1(
-				"STSResource",
-				ap_set_string_slot,
-				(void*)APR_OFFSETOF(sts_dir_config, resource),
+		AP_INIT_TAKE12(
+				"STSRequestParameter",
+				sts_set_request_parameter,
+				(void*)APR_OFFSETOF(sts_dir_config, request_parameters),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Set the STS resource value."),
+				"Set extra request parameters for the token exchange request."),
 
 		AP_INIT_TAKE1(
 				"STSWSTrustEndpoint",
@@ -1326,12 +1310,6 @@ static const command_rec sts_cmds[] = {
 				(void*)APR_OFFSETOF(sts_server_config, ropc_username),
 				RSRC_CONF,
 				"Set the username to be used in the OAuth 2.0 ROPC token request; if left empty the client_id will be passed in the username parameter."),
-		AP_INIT_TAKE12(
-				"STSROPCRequestParameter",
-				sts_set_oauth_request_parameter,
-				(void*)APR_OFFSETOF(sts_server_config, ropc_request_parameters),
-				RSRC_CONF,
-				"Set extra request parameters to the token request."),
 
 		AP_INIT_TAKE1(
 				"STSOTXEndpoint",
@@ -1351,12 +1329,6 @@ static const command_rec sts_cmds[] = {
 				(void*)APR_OFFSETOF(sts_server_config, otx_client_id),
 				RSRC_CONF,
 				"Set the Client ID for the OAuth 2.0 Token Exchange request."),
-		AP_INIT_TAKE12(
-				"STSOTXRequestParameter",
-				sts_set_oauth_request_parameter,
-				(void*)APR_OFFSETOF(sts_server_config, otx_request_parameters),
-				RSRC_CONF,
-				"Set extra request parameters to the token exchange request."),
 
 		AP_INIT_TAKE1(
 				"STSCacheExpiresIn",

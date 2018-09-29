@@ -51,7 +51,6 @@
 
 #define STS_OTX_GRANT_TYPE_NAME          "grant_type"
 #define STS_OTX_GRANT_TYPE_VALUE         "urn:ietf:params:oauth:grant-type:token-exchange"
-#define STS_OTX_RESOURCE_NAME            "resource"
 #define STS_OTX_SUBJECT_TOKEN_NAME       "subject_token"
 #define STS_OTX_SUBJECT_TOKEN_TYPE_NAME  "subject_token_type"
 #define STS_OTX_SUBJECT_TOKEN_TYPE_VALUE "urn:ietf:params:oauth:token-type:access_token"
@@ -81,17 +80,18 @@ static const char * sts_otx_get_client_id(request_rec *r) {
 	return cfg->otx_client_id;
 }
 
-static apr_table_t *sts_otx_get_request_parameters(request_rec *r) {
-	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (cfg->otx_request_parameters == NULL) {
-		cfg->otx_request_parameters = apr_table_make(r->server->process->pool,
-				2);
-		apr_table_set(cfg->otx_request_parameters,
+static apr_table_t *sts_otx_merge_request_parameters(request_rec *r,
+		apr_table_t *params) {
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+	if (dir_cfg->request_parameters == NULL) {
+		dir_cfg->request_parameters = apr_table_make(r->server->process->pool,
+				1);
+		apr_table_set(dir_cfg->request_parameters,
 				STS_OTX_SUBJECT_TOKEN_TYPE_NAME,
 				STS_OTX_SUBJECT_TOKEN_TYPE_VALUE);
 	}
-	return cfg->otx_request_parameters;
+	return apr_table_overlay(r->pool, dir_cfg->request_parameters, params);
 }
 
 apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
@@ -104,22 +104,18 @@ apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
 	json_t *result = NULL;
 	const char *client_cert = NULL, *client_key = NULL;
 	const char *client_id = sts_otx_get_client_id(r);
-	const char *resource = sts_get_resource(r);
 
 	sts_debug(r, "enter");
 
 	params = apr_table_make(r->pool, 4);
 	apr_table_addn(params, STS_OTX_GRANT_TYPE_NAME,
 			STS_OTX_GRANT_TYPE_VALUE);
-	if (strcmp(resource, "") != 0)
-		apr_table_addn(params, STS_OTX_RESOURCE_NAME, resource);
 	apr_table_addn(params, STS_OTX_SUBJECT_TOKEN_NAME, token);
 	// TODO: this is not really specified...
 	if (sts_otx_get_endpoint_auth(r) == STS_ENDPOINT_AUTH_NONE)
 		apr_table_addn(params, STS_OAUTH_CLIENT_ID, client_id);
 
-	params = apr_table_overlay(r->pool, sts_otx_get_request_parameters(r),
-			params);
+	params = sts_otx_merge_request_parameters(r, params);
 
 	if (sts_get_oauth_endpoint_auth(r, sts_otx_get_endpoint_auth(r),
 			cfg->otx_endpoint_auth_options, sts_otx_get_endpoint(r), params,

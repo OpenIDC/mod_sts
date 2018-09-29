@@ -53,7 +53,6 @@
 #define STS_ROPC_GRANT_TYPE_VALUE "password"
 #define STS_ROPC_USERNAME         "username"
 #define STS_ROPC_PASSWORD         "password"
-#define STS_ROPC_AUD              "aud"
 
 static const char * sts_ropc_get_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
@@ -88,20 +87,13 @@ static const char * sts_ropc_get_username(request_rec *r) {
 	return cfg->ropc_username;
 }
 
-static apr_table_t *sts_ropc_get_request_parameters(request_rec *r) {
-	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
-			r->server->module_config, &sts_module);
-	if (cfg->ropc_request_parameters == NULL) {
-		cfg->ropc_request_parameters = apr_table_make(r->server->process->pool,
-				2);
-	}
-	return cfg->ropc_request_parameters;
-}
-
-static const char * sts_rocp_get_resource(request_rec *r) {
+static apr_table_t *sts_ropc_merge_request_parameters(request_rec *r,
+		apr_table_t *params) {
 	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&sts_module);
-	return dir_cfg->resource;
+	return (dir_cfg->request_parameters != NULL) ?
+			apr_table_overlay(r->pool, dir_cfg->request_parameters, params) :
+			params;
 }
 
 apr_byte_t sts_exec_ropc(request_rec *r, sts_server_config *cfg,
@@ -115,7 +107,6 @@ apr_byte_t sts_exec_ropc(request_rec *r, sts_server_config *cfg,
 	const char *client_cert = NULL, *client_key = NULL;
 	const char *client_id = sts_ropc_get_client_id(r);
 	const char *username = sts_ropc_get_username(r);
-	const char *resource = sts_rocp_get_resource(r);
 
 	sts_debug(r, "enter");
 
@@ -126,11 +117,8 @@ apr_byte_t sts_exec_ropc(request_rec *r, sts_server_config *cfg,
 	if (username != NULL)
 		apr_table_addn(params, STS_ROPC_USERNAME, username);
 	apr_table_addn(params, STS_ROPC_PASSWORD, token);
-	if ((resource != NULL) && (strcmp(resource, "") != 0))
-		apr_table_addn(params, STS_ROPC_AUD, resource);
 
-	params = apr_table_overlay(r->pool, sts_ropc_get_request_parameters(r),
-			params);
+	params = sts_ropc_merge_request_parameters(r, params);
 
 	if (sts_get_oauth_endpoint_auth(r, sts_ropc_get_endpoint_auth(r),
 			cfg->ropc_endpoint_auth_options, sts_ropc_get_endpoint(r), params,

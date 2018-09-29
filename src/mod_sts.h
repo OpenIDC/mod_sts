@@ -145,13 +145,11 @@ typedef struct {
 	apr_hash_t *ropc_endpoint_auth_options;
 	char *ropc_client_id;
 	char *ropc_username;
-	apr_table_t *ropc_request_parameters;
 
 	char *otx_endpoint;
 	int otx_endpoint_auth;
 	apr_hash_t *otx_endpoint_auth_options;
 	char *otx_client_id;
-	apr_table_t *otx_request_parameters;
 
 	void *cache_cfg;
 	int cache_shm_size_max;
@@ -161,7 +159,7 @@ typedef struct {
 typedef struct {
 	int enabled;
 	int cache_expires_in;
-	char *resource;
+	apr_table_t *request_parameters;
 	int accept_source_token_in;
 	apr_hash_t *accept_source_token_in_options;
 	int strip_source_token;
@@ -222,7 +220,6 @@ apr_byte_t sts_get_oauth_endpoint_auth(request_rec *r, int auth,
 		apr_hash_t *auth_options, const char *endpoint, apr_table_t *params,
 		const char *client_id, char **basic_auth, const char **client_cert,
 		const char **client_key);
-const char * sts_get_resource(request_rec *r);
 int sts_get_ssl_validation(request_rec *r);
 int sts_get_http_timeout(request_rec *r);
 char *sts_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename);
