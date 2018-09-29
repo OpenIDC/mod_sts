@@ -43,9 +43,8 @@
  *
  **************************************************************************/
 
-// TODO: is the fixup handler the right place for the sts_handler
-//       or should we only handle source/target envvar stuff there?
 // TOOD: ws-trust source tokens can only be presented as BinarySecurityToken's; should we support native SAML 2.0 etc.?
+// TODO: support consuming a source token from a POST parameter (difficult not to consume the POST data...)?
 #include "mod_sts.h"
 
 #include <cjose/cjose.h>
@@ -667,9 +666,9 @@ static char *sts_get_source_token_from_cookie(request_rec *r) {
 	return source_token;
 }
 
-static const char *sts_get_source_token(request_rec *r) {
+static char *sts_get_source_token(request_rec *r) {
 
-	const char *source_token = NULL;
+	char *source_token = NULL;
 
 	int accept_source_token_in = sts_get_accept_source_token_in(r);
 
@@ -811,9 +810,8 @@ static int sts_set_target_token(request_rec *r, char *target_token) {
 	return OK;
 }
 
-static int sts_handler(request_rec *r) {
+static int sts_handler(request_rec *r, char **source_token) {
 	char *target_token = NULL, *cache_key = NULL;
-	const char *source_token = NULL;
 	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&sts_module);
 
@@ -824,16 +822,16 @@ static int sts_handler(request_rec *r) {
 		return DECLINED;
 	}
 
-	source_token = sts_get_source_token(r);
-	if (source_token == NULL)
+	*source_token = sts_get_source_token(r);
+	if (*source_token == NULL)
 		return DECLINED;
 
-	cache_key = apr_psprintf(r->pool, "%s:%s", dir_cfg->path, source_token);
+	cache_key = apr_psprintf(r->pool, "%s:%s", dir_cfg->path, *source_token);
 	sts_cache_shm_get(r, STS_CACHE_SECTION, cache_key, &target_token);
 
 	if (target_token == NULL) {
 		sts_debug(r, "cache miss (%s)", cache_key);
-		if (sts_util_token_exchange(r, source_token, &target_token) == FALSE) {
+		if (sts_util_token_exchange(r, *source_token, &target_token) == FALSE) {
 			sts_error(r, "sts_util_token_exchange failed");
 			return HTTP_UNAUTHORIZED;
 		}
@@ -847,25 +845,52 @@ static int sts_handler(request_rec *r) {
 	return sts_set_target_token(r, target_token);
 }
 
+static const char *userdata_key = "sts_fixup_handler";
+
 static int sts_post_read_request(request_rec *r) {
-	sts_debug(r, "enter");
-	return DECLINED;
+	sts_debug(r, "enter: \"%s?%s\", ap_is_initial_req(r)=%d",
+			r->parsed_uri.path, r->args, ap_is_initial_req(r));
+
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+	char *source_token = NULL;
+	int rc = DECLINED;
+
+	if (ap_is_initial_req(r) == 0)
+		return DECLINED;
+
+	rc = sts_handler(r, &source_token);
+
+	// if the source token comes from an env var, that may not have been set until
+	// the fixup handler runs, so we'll indicated that we want to run at fixup time
+	if ((rc == DECLINED) && (source_token == NULL)
+			&& (dir_cfg->accept_source_token_in & STS_CONFIG_TOKEN_ENVVAR)) {
+		apr_pool_userdata_set((const void *) 1, userdata_key,
+				apr_pool_cleanup_null, r->pool);
+	}
+
+	sts_debug(r, "leave: %d", rc);
+	return rc;
 }
 
 static int sts_fixup_handler(request_rec *r) {
 	sts_debug(r, "enter: \"%s?%s\", ap_is_initial_req(r)=%d",
 			r->parsed_uri.path, r->args, ap_is_initial_req(r));
-	/*
-	 const char *userdata_key = "sts_fixup_handler";
-	 void *data = NULL;
-	 apr_pool_userdata_get(&data, userdata_key, r->pool);
-	 if (data == NULL) {
-	 apr_pool_userdata_set((const void *) 1, userdata_key,
-	 apr_pool_cleanup_null,r->pool);
-	 return sts_handler(r);;
-	 }
-	 */
-	return (ap_is_initial_req(r) != 0) ? sts_handler(r) : OK;
+
+	if (ap_is_initial_req(r) == 0)
+		return DECLINED;
+
+	char *source_token = NULL;
+	int rc = DECLINED;
+	void *data = NULL;
+	apr_pool_userdata_get(&data, userdata_key, r->pool);
+	// TBD: do we need to only handle env var stuff; right now it also looks for tokens elsewhere
+	// TBD: always set target env var token in the fixup handler to be "more authoritative"?
+	if (data != NULL)
+		rc = sts_handler(r, &source_token);
+
+	sts_debug(r, "leave: %d", rc);
+	return rc;
 }
 
 apr_byte_t sts_get_endpoint_auth_cert_key(request_rec *r, apr_hash_t *options,
@@ -1308,7 +1333,8 @@ static void sts_register_hooks(apr_pool_t *p) {
 	ap_hook_fixups(sts_fixup_handler, aszPre, NULL, APR_HOOK_MIDDLE);
 }
 
-static const command_rec sts_cmds[] = {
+static const command_rec sts_cmds[] =
+{
 
 		AP_INIT_FLAG(
 				STSEnabled,

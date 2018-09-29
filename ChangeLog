@@ -1,4 +1,8 @@
 9/29/2018
+- run at post_read phase instead of fixup phase, except if no source token was (yet) found in an env var
+- version 0.9.2
+
+9/29/2018
 - set defaults to NULL and do per-mode configuration checks on startup
 - version 0.9.1
 
