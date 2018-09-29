@@ -1,4 +1,4 @@
-AC_INIT([mod_sts],[0.7.6],[hans.zandbelt@zmartzone.eu])
+AC_INIT([mod_sts],[0.8.0],[hans.zandbelt@zmartzone.eu])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 

@@ -166,6 +166,7 @@ typedef struct {
 	int strip_source_token;
 	int set_target_token_in;
 	apr_hash_t *set_target_token_in_options;
+	char *path;
 } sts_dir_config;
 
 void *sts_create_server_config(apr_pool_t *pool, server_rec *svr);

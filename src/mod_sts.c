@@ -43,8 +43,6 @@
  *
  **************************************************************************/
 
-// TODO: check input of parameters; perhaps use AP_INIT_ITERATE2
-// TODO: see if token caching is correct wrt. different request parameters in per-directory context (need per-dir cache?)
 // TODO: check for a sane configuration at startup (and leave current localhost defaults to null)
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
@@ -735,6 +733,11 @@ static int sts_set_target_token(request_rec *r, char *target_token) {
 }
 
 static int sts_handler(request_rec *r) {
+	char *target_token = NULL, *cache_key = NULL;
+	const char *source_token = NULL;
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+
 	sts_debug(r, "enter");
 
 	if (sts_get_enabled(r) != 1) {
@@ -742,22 +745,25 @@ static int sts_handler(request_rec *r) {
 		return DECLINED;
 	}
 
-	const char *source_token = sts_get_source_token(r);
+	source_token = sts_get_source_token(r);
 	if (source_token == NULL)
 		return DECLINED;
 
-	char *target_token = NULL;
-	sts_cache_shm_get(r, STS_CACHE_SECTION, source_token, &target_token);
+	cache_key = apr_psprintf(r->pool, "%s:%s",
+			dir_cfg->path ? dir_cfg->path : "", source_token);
+	sts_cache_shm_get(r, STS_CACHE_SECTION, cache_key, &target_token);
 
 	if (target_token == NULL) {
-		sts_debug(r, "cache miss");
+		sts_debug(r, "cache miss (%s)", cache_key);
 		if (sts_util_token_exchange(r, source_token, &target_token) == FALSE) {
 			sts_error(r, "sts_util_token_exchange failed");
 			return HTTP_UNAUTHORIZED;
 		}
 
-		sts_cache_shm_set(r, STS_CACHE_SECTION, source_token, target_token,
+		sts_cache_shm_set(r, STS_CACHE_SECTION, cache_key, target_token,
 				apr_time_now() + apr_time_from_sec(sts_get_cache_expires_in(r)));
+	} else {
+		sts_debug(r, "cache hit (%s)", cache_key);
 	}
 
 	return sts_set_target_token(r, target_token);
@@ -1182,6 +1188,7 @@ void *sts_create_dir_config(apr_pool_t *pool, char *path) {
 	c->set_target_token_in = STS_CONFIG_POS_INT_UNSET;
 	c->set_target_token_in_options = NULL;
 	c->resource = NULL;
+	c->path = apr_pstrdup(pool, path);
 	return c;
 }
 
@@ -1212,8 +1219,8 @@ static void *sts_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->set_target_token_in_options != NULL ?
 					add->set_target_token_in_options :
 					base->set_target_token_in_options;
-
 	c->resource = add->resource != NULL ? add->resource : base->resource;
+	c->path = add->path != NULL ? add->path : base->path;
 	return c;
 }
 

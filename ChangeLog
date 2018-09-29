@@ -1,3 +1,7 @@
+9/29/2018
+- correct caching on a per-directory configuration based context
+- version 0.8.0
+
 9/28/2018
 - add name value parameters by AP_INIT_TAKE2 syntax and rename STSOTXRequestParameters to STSOTXRequestParameter
 - version 0.7.6
