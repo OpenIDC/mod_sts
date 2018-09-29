@@ -60,38 +60,38 @@
 static const char * sts_otx_get_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (cfg->oauth_tx_endpoint == NULL)
+	if (cfg->otx_endpoint == NULL)
 		return STS_OTX_ENDPOINT_DEFAULT;
-	return cfg->oauth_tx_endpoint;
+	return cfg->otx_endpoint;
 }
 
 static int sts_otx_get_endpoint_auth(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (cfg->oauth_tx_endpoint_auth == STS_CONFIG_POS_INT_UNSET)
+	if (cfg->otx_endpoint_auth == STS_CONFIG_POS_INT_UNSET)
 		return STS_OTX_ENDPOINT_AUTH_DEFAULT;
-	return cfg->oauth_tx_endpoint_auth;
+	return cfg->otx_endpoint_auth;
 }
 
 static const char * sts_otx_get_client_id(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (cfg->oauth_tx_client_id == NULL)
+	if (cfg->otx_client_id == NULL)
 		return STS_OTX_CLIENT_ID_DEFAULT;
-	return cfg->oauth_tx_client_id;
+	return cfg->otx_client_id;
 }
 
 static apr_table_t *sts_otx_get_request_parameters(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
-	if (cfg->oauth_tx_request_parameters == NULL) {
-		cfg->oauth_tx_request_parameters = apr_table_make(
-				r->server->process->pool, 2);
-		apr_table_set(cfg->oauth_tx_request_parameters,
+	if (cfg->otx_request_parameters == NULL) {
+		cfg->otx_request_parameters = apr_table_make(r->server->process->pool,
+				2);
+		apr_table_set(cfg->otx_request_parameters,
 				STS_OTX_SUBJECT_TOKEN_TYPE_NAME,
 				STS_OTX_SUBJECT_TOKEN_TYPE_VALUE);
 	}
-	return cfg->oauth_tx_request_parameters;
+	return cfg->otx_request_parameters;
 }
 
 apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
@@ -122,8 +122,8 @@ apr_byte_t sts_exec_otx(request_rec *r, sts_server_config *cfg,
 			params);
 
 	if (sts_get_oauth_endpoint_auth(r, sts_otx_get_endpoint_auth(r),
-			cfg->oauth_tx_endpoint_auth_options, sts_otx_get_endpoint(r),
-			params, client_id, &basic_auth, &client_cert, &client_key) == FALSE)
+			cfg->otx_endpoint_auth_options, sts_otx_get_endpoint(r), params,
+			client_id, &basic_auth, &client_cert, &client_key) == FALSE)
 		return FALSE;
 
 	if (sts_util_http_post_form(r, sts_otx_get_endpoint(r), params, basic_auth,

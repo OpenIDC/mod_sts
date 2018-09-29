@@ -43,6 +43,7 @@
  *
  **************************************************************************/
 
+// TODO: see if we need to remove STSRequest and leave it to the *RequestParam setting
 // TODO: check for a sane configuration at startup (and leave current localhost defaults to null)
 // TODO: is the fixup handler the right place for the sts_handler
 //       or should we only handle source/target envvar stuff there?
@@ -357,7 +358,7 @@ static const char *sts_set_ropc_endpoint_auth(cmd_parms *cmd, void *m,
 			&cfg->ropc_endpoint_auth_options);
 }
 
-static const char *sts_set_oauth_tx_endpoint_auth(cmd_parms *cmd, void *m,
+static const char *sts_set_otx_endpoint_auth(cmd_parms *cmd, void *m,
 		const char *arg) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			cmd->server->module_config, &sts_module);
@@ -369,8 +370,8 @@ static const char *sts_set_oauth_tx_endpoint_auth(cmd_parms *cmd, void *m,
 			STS_ENDPOINT_AUTH_CLIENT_CERT_STR,
 			NULL };
 	return sts_set_method_options(cmd, arg, methods,
-			sts_get_allowed_endpoint_auth_methods, &cfg->oauth_tx_endpoint_auth,
-			&cfg->oauth_tx_endpoint_auth_options);
+			sts_get_allowed_endpoint_auth_methods, &cfg->otx_endpoint_auth,
+			&cfg->otx_endpoint_auth_options);
 }
 
 static const char *sts_set_oauth_request_parameter(cmd_parms *cmd, void *m,
@@ -1095,11 +1096,11 @@ void *sts_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->ropc_client_id = NULL;
 	c->ropc_username = NULL;
 
-	c->oauth_tx_endpoint = NULL;
-	c->oauth_tx_endpoint_auth = STS_CONFIG_POS_INT_UNSET;
-	c->oauth_tx_endpoint_auth_options = NULL;
-	c->oauth_tx_client_id = NULL;
-	c->oauth_tx_request_parameters = NULL;
+	c->otx_endpoint = NULL;
+	c->otx_endpoint_auth = STS_CONFIG_POS_INT_UNSET;
+	c->otx_endpoint_auth_options = NULL;
+	c->otx_client_id = NULL;
+	c->otx_request_parameters = NULL;
 
 	c->cache_cfg = NULL;
 	//c->cache_shm_size_max = STS_CONFIG_POS_INT_UNSET;
@@ -1159,23 +1160,21 @@ static void *sts_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->ropc_username != NULL ?
 					add->ropc_username : base->ropc_username;
 
-	c->oauth_tx_endpoint =
-			add->oauth_tx_endpoint != NULL ?
-					add->oauth_tx_endpoint : base->oauth_tx_endpoint;
-	c->oauth_tx_endpoint_auth =
-			add->oauth_tx_endpoint_auth != STS_CONFIG_POS_INT_UNSET ?
-					add->oauth_tx_endpoint_auth : base->oauth_tx_endpoint_auth;
-	c->oauth_tx_endpoint_auth_options =
-			add->oauth_tx_endpoint_auth_options != NULL ?
-					add->oauth_tx_endpoint_auth_options :
-					base->oauth_tx_endpoint_auth_options;
-	c->oauth_tx_client_id =
-			add->oauth_tx_client_id != NULL ?
-					add->oauth_tx_client_id : base->oauth_tx_client_id;
-	c->oauth_tx_request_parameters =
-			add->oauth_tx_request_parameters != NULL ?
-					add->oauth_tx_request_parameters :
-					base->oauth_tx_request_parameters;
+	c->otx_endpoint =
+			add->otx_endpoint != NULL ? add->otx_endpoint : base->otx_endpoint;
+	c->otx_endpoint_auth =
+			add->otx_endpoint_auth != STS_CONFIG_POS_INT_UNSET ?
+					add->otx_endpoint_auth : base->otx_endpoint_auth;
+	c->otx_endpoint_auth_options =
+			add->otx_endpoint_auth_options != NULL ?
+					add->otx_endpoint_auth_options :
+					base->otx_endpoint_auth_options;
+	c->otx_client_id =
+			add->otx_client_id != NULL ?
+					add->otx_client_id : base->otx_client_id;
+	c->otx_request_parameters =
+			add->otx_request_parameters != NULL ?
+					add->otx_request_parameters : base->otx_request_parameters;
 
 	c->cache_cfg = add->cache_cfg != NULL ? add->cache_cfg : base->cache_cfg;
 	//c->cache_shm_size_max = add->cache_shm_size_max != STS_CONFIG_POS_INT_UNSET ? add->cache_shm_size_max : base->cache_shm_size_max;
@@ -1337,25 +1336,25 @@ static const command_rec sts_cmds[] = {
 		AP_INIT_TAKE1(
 				"STSOTXEndpoint",
 				sts_set_string_slot,
-				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_endpoint),
+				(void*)APR_OFFSETOF(sts_server_config, otx_endpoint),
 				RSRC_CONF,
 				"Set the OAuth 2.0 Token Exchange Endpoint."),
 		AP_INIT_TAKE1(
 				"STSOTXEndpointAuth",
-				sts_set_oauth_tx_endpoint_auth,
-				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_endpoint_auth),
+				sts_set_otx_endpoint_auth,
+				(void*)APR_OFFSETOF(sts_server_config, otx_endpoint_auth),
 				RSRC_CONF,
 				"Configure how this module authenticates to the OAuth 2.0 Token Exchange Endpoint."),
 		AP_INIT_TAKE1(
 				"STSOTXClientID",
 				sts_set_string_slot,
-				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_client_id),
+				(void*)APR_OFFSETOF(sts_server_config, otx_client_id),
 				RSRC_CONF,
 				"Set the Client ID for the OAuth 2.0 Token Exchange request."),
 		AP_INIT_TAKE12(
 				"STSOTXRequestParameter",
 				sts_set_oauth_request_parameter,
-				(void*)APR_OFFSETOF(sts_server_config, oauth_tx_request_parameters),
+				(void*)APR_OFFSETOF(sts_server_config, otx_request_parameters),
 				RSRC_CONF,
 				"Set extra request parameters to the token exchange request."),
 

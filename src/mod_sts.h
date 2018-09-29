@@ -147,11 +147,11 @@ typedef struct {
 	char *ropc_username;
 	apr_table_t *ropc_request_parameters;
 
-	char *oauth_tx_endpoint;
-	int oauth_tx_endpoint_auth;
-	apr_hash_t *oauth_tx_endpoint_auth_options;
-	char *oauth_tx_client_id;
-	apr_table_t *oauth_tx_request_parameters;
+	char *otx_endpoint;
+	int otx_endpoint_auth;
+	apr_hash_t *otx_endpoint_auth_options;
+	char *otx_client_id;
+	apr_table_t *otx_request_parameters;
 
 	void *cache_cfg;
 	int cache_shm_size_max;
