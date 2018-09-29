@@ -60,10 +60,17 @@
 #define STS_WSTRUST_TOKEN_TYPE_DEFAULT     "urn:bogus:token"
 //#define STS_WSTRUST_TOKEN_TYPE_DEFAULT      "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0"
 
+#define STS_WSTRUST_XML_SOAP_NS				"http://www.w3.org/2003/05/soap-envelope"
+#define STS_WSTRUST_XML_WSTRUST_NS			"http://docs.oasis-open.org/ws-sx/ws-trust/200512"
+#define STS_WSTRUST_XML_WSSE_NS				"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
+#define STS_WSTRUST_XML_WSU_NS				"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"
+#define STS_WSTRUST_XML_WSA_NS				"http://www.w3.org/2005/08/addressing"
+#define STS_WSTRUST_XML_WSP_NS				"http://schemas.xmlsoap.org/ws/2004/09/policy"
+
+#define STS_WSTRUST_ACTION_DEFAULT          STS_WSTRUST_XML_WSTRUST_NS "/RST/Issue"
+#define STS_WSTRUST_REQUEST_TYPE_DEFAULT    STS_WSTRUST_XML_WSTRUST_NS "/Issue"
+#define STS_WSTRUST_KEY_TYPE_DEFAULT        STS_WSTRUST_XML_WSTRUST_NS "/SymmetricKey"
 #define STS_WSTRUST_VALUE_TYPE_DEFAULT      "urn:pingidentity.com:oauth2:grant_type:validate_bearer"
-#define STS_WSTRUST_ACTION_DEFAULT          "http://docs.oasis-open.org/ws-sx/ws-trust/200512/RST/Issue"
-#define STS_WSTRUST_REQUEST_TYPE_DEFAULT    "http://docs.oasis-open.org/ws-sx/ws-trust/200512/Issue"
-#define STS_WSTRUST_KEY_TYPE_DEFAULT        "http://docs.oasis-open.org/ws-sx/ws-trust/200512/SymmetricKey"
 
 static const char * sts_wstrust_get_endpoint(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
@@ -106,23 +113,23 @@ static const char * sts_wstrust_get_value_type(request_rec *r) {
 }
 
 const char *ws_trust_soap_call_template =
-		"<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">"
+		"<s:Envelope xmlns:s=\"" STS_WSTRUST_XML_SOAP_NS "\">"
 		"  <s:Header>"
-		"    <wsse:Security xmlns:wsse=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">"
-		"      <wsu:Timestamp xmlns:wsu=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\" wsu:Id=\"%s\">"
+		"    <wsse:Security xmlns:wsse=\"" STS_WSTRUST_XML_WSSE_NS "\">"
+		"      <wsu:Timestamp xmlns:wsu=\"" STS_WSTRUST_XML_WSU_NS "\" wsu:Id=\"%s\">"
 		"        <wsu:Created>%s</wsu:Created>"
 		"        <wsu:Expires>%s</wsu:Expires>"
 		"      </wsu:Timestamp>"
-		"	     <wsse:BinarySecurityToken xmlns:wsu=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\" wsu:Id=\"%s\" ValueType=\"%s\">%s</wsse:BinarySecurityToken>"
+		"	     <wsse:BinarySecurityToken xmlns:wsu=\"" STS_WSTRUST_XML_WSU_NS "\" wsu:Id=\"%s\" ValueType=\"%s\">%s</wsse:BinarySecurityToken>"
 		"    </wsse:Security>"
-		"    <wsa:To xmlns:wsa=\"http://www.w3.org/2005/08/addressing\">%s</wsa:To>"
-		"    <wsa:Action xmlns:wsa=\"http://www.w3.org/2005/08/addressing\">%s</wsa:Action>"
+		"    <wsa:To xmlns:wsa=\"" STS_WSTRUST_XML_WSA_NS "\">%s</wsa:To>"
+		"    <wsa:Action xmlns:wsa=\"" STS_WSTRUST_XML_WSA_NS "\">%s</wsa:Action>"
 		"  </s:Header>"
-		"  <s:Body><wst:RequestSecurityToken xmlns:wst=\"http://docs.oasis-open.org/ws-sx/ws-trust/200512\">"
+		"  <s:Body><wst:RequestSecurityToken xmlns:wst=\"" STS_WSTRUST_XML_WSTRUST_NS "\">"
 		"    <wst:TokenType>%s</wst:TokenType>"
 		"    <wst:RequestType>%s</wst:RequestType>"
-		"    <wsp:AppliesTo xmlns:wsp=\"http://schemas.xmlsoap.org/ws/2004/09/policy\">"
-		"      <wsa:EndpointReference xmlns:wsa=\"http://www.w3.org/2005/08/addressing\">"
+		"    <wsp:AppliesTo xmlns:wsp=\"" STS_WSTRUST_XML_WSP_NS "\">"
+		"      <wsa:EndpointReference xmlns:wsa=\"" STS_WSTRUST_XML_WSA_NS "\">"
 		"        <wsa:Address>%s</wsa:Address>"
 		"      </wsa:EndpointReference>"
 		"    </wsp:AppliesTo>"
@@ -155,7 +162,7 @@ int sts_execute_xpath_expression(request_rec *r, const char* xmlStr,
 	}
 
 	if (xmlXPathRegisterNs(xpathCtx, (const xmlChar *) "s",
-			(const xmlChar *) "http://www.w3.org/2003/05/soap-envelope") != 0) {
+			(const xmlChar *) STS_WSTRUST_XML_SOAP_NS) != 0) {
 		fprintf(stderr, "Error: unable to register NS");
 		xmlXPathFreeContext(xpathCtx);
 		xmlFreeDoc(doc);
@@ -163,8 +170,7 @@ int sts_execute_xpath_expression(request_rec *r, const char* xmlStr,
 	}
 
 	if (xmlXPathRegisterNs(xpathCtx, (const xmlChar *) "wst",
-			(const xmlChar *) "http://docs.oasis-open.org/ws-sx/ws-trust/200512")
-			!= 0) {
+			(const xmlChar *) STS_WSTRUST_XML_WSTRUST_NS) != 0) {
 		fprintf(stderr, "Error: unable to register NS");
 		xmlXPathFreeContext(xpathCtx);
 		xmlFreeDoc(doc);
@@ -172,8 +178,7 @@ int sts_execute_xpath_expression(request_rec *r, const char* xmlStr,
 	}
 
 	if (xmlXPathRegisterNs(xpathCtx, (const xmlChar *) "wsse",
-			(const xmlChar *) "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd")
-			!= 0) {
+			(const xmlChar *) STS_WSTRUST_XML_WSSE_NS) != 0) {
 		fprintf(stderr, "Error: unable to register NS");
 		xmlXPathFreeContext(xpathCtx);
 		xmlFreeDoc(doc);
