@@ -451,7 +451,12 @@ static int sts_get_set_target_token_in(request_rec *r) {
 const char * sts_get_resource(request_rec *r) {
 	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&sts_module);
-	return dir_cfg->resource;
+	char *rv = dir_cfg->resource;
+	if (rv == NULL)
+		rv = dir_cfg->path;
+	if (rv == NULL)
+		rv = sts_util_get_current_url(r);
+	return rv;
 }
 
 const char *sts_get_config_method_option(request_rec *r,
@@ -735,8 +740,6 @@ static int sts_set_target_token(request_rec *r, char *target_token) {
 static int sts_handler(request_rec *r) {
 	char *target_token = NULL, *cache_key = NULL;
 	const char *source_token = NULL;
-	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&sts_module);
 
 	sts_debug(r, "enter");
 
@@ -749,8 +752,8 @@ static int sts_handler(request_rec *r) {
 	if (source_token == NULL)
 		return DECLINED;
 
-	cache_key = apr_psprintf(r->pool, "%s:%s",
-			dir_cfg->path ? dir_cfg->path : "", source_token);
+	cache_key = apr_psprintf(r->pool, "%s:%s", sts_get_resource(r),
+			source_token);
 	sts_cache_shm_get(r, STS_CACHE_SECTION, cache_key, &target_token);
 
 	if (target_token == NULL) {
@@ -893,7 +896,7 @@ static apr_byte_t sts_add_signed_jwt_and_release_jwk(request_rec *r,
 
 	rc = TRUE;
 
-	out:
+out:
 
 	if (json)
 		json_decref(json);
