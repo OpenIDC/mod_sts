@@ -48,6 +48,7 @@
 #include "mod_sts.h"
 
 #include <cjose/cjose.h>
+#include <curl/curl.h>
 
 module AP_MODULE_DECLARE_DATA sts_module;
 
@@ -110,21 +111,6 @@ const int STS_ENDPOINT_AUTH_CLIENT_SECRET_POST = 4;
 const int STS_ENDPOINT_AUTH_CLIENT_SECRET_JWT = 5;
 const int STS_ENDPOINT_AUTH_PRIVATE_KEY_JWT = 6;
 
-static apr_status_t sts_cleanup_handler(void *data) {
-	server_rec *s = (server_rec *) data;
-	sts_sinfo(s, "%s - shutdown", NAMEVERSION);
-
-	server_rec *sp = (server_rec *) data;
-	while (sp != NULL) {
-		if (sts_cache_shm_destroy(sp) != APR_SUCCESS) {
-			sts_serror(sp, "cache destroy function failed");
-		}
-		sp = sp->next;
-	}
-
-	return APR_SUCCESS;
-}
-
 static int sts_config_merged_vhost_configs_exist(server_rec *s) {
 	sts_server_config *cfg = NULL;
 	int rc = FALSE;
@@ -179,6 +165,29 @@ static int sts_config_check_merged_vhost_configs(apr_pool_t *pool,
 	return rc;
 }
 
+static apr_status_t sts_cleanup_child(void *data) {
+	server_rec *sp = (server_rec *) data;
+	while (sp != NULL) {
+		if (sts_cache_shm_destroy(sp) != APR_SUCCESS) {
+			sts_serror(sp, "sts_cache_shm_destroy failed");
+		}
+		sp = sp->next;
+	}
+
+	return APR_SUCCESS;
+}
+
+static apr_status_t sts_cleanup_parent(void *data) {
+	server_rec *s = (server_rec *) data;
+
+	sts_sinfo(s, "%s - shutdown", NAMEVERSION);
+
+	sts_cleanup_child(data);
+	curl_global_cleanup();
+
+	return APR_SUCCESS;
+}
+
 static int sts_post_config_handler(apr_pool_t *pool, apr_pool_t *p1,
 		apr_pool_t *p2, server_rec *s) {
 
@@ -198,7 +207,8 @@ static int sts_post_config_handler(apr_pool_t *pool, apr_pool_t *p1,
 	}
 
 	sts_sinfo(s, "%s - init", NAMEVERSION);
-	apr_pool_cleanup_register(pool, s, sts_cleanup_handler,
+
+	apr_pool_cleanup_register(pool, s, sts_cleanup_parent,
 			apr_pool_cleanup_null);
 
 	server_rec *sp = s;
@@ -208,15 +218,17 @@ static int sts_post_config_handler(apr_pool_t *pool, apr_pool_t *p1,
 		sp = sp->next;
 	}
 
+	curl_global_init(CURL_GLOBAL_ALL);
+
 	/*
 	 * Apache has a base vhost that true vhosts derive from.
 	 * There are two startup scenarios:
 	 *
-	 * 1. Only the base vhost contains OIDC settings.
+	 * 1. Only the base vhost contains STS settings.
 	 *    No server configs have been merged.
 	 *    Only the base vhost needs to be checked.
 	 *
-	 * 2. The base vhost contains zero or more OIDC settings.
+	 * 2. The base vhost contains zero or more STS settings.
 	 *    One or more vhosts override these.
 	 *    These vhosts have a merged config.
 	 *    All merged configs need to be checked.
@@ -229,12 +241,14 @@ static int sts_post_config_handler(apr_pool_t *pool, apr_pool_t *p1,
 }
 
 static void sts_child_init(apr_pool_t *p, server_rec *s) {
-	while (s != NULL) {
-		if (sts_cache_shm_child_init(p, s) != APR_SUCCESS) {
-			sts_serror(s, "cfg->cache->child_init failed");
+	server_rec *sp = s;
+	while (sp != NULL) {
+		if (sts_cache_shm_child_init(p, sp) != APR_SUCCESS) {
+			sts_serror(s, "sts_cache_shm_child_init failed");
 		}
-		s = s->next;
+		sp = sp->next;
 	}
+	apr_pool_cleanup_register(p, s, sts_cleanup_child, apr_pool_cleanup_null);
 }
 
 static const char *sts_set_string_slot(cmd_parms *cmd, void *struct_ptr,
@@ -996,7 +1010,7 @@ static apr_byte_t sts_add_signed_jwt_and_release_jwk(request_rec *r,
 
 	rc = TRUE;
 
-out:
+	out:
 
 	if (json)
 		json_decref(json);

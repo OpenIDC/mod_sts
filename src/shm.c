@@ -64,6 +64,8 @@ extern module AP_MODULE_DECLARE_DATA sts_module;
 typedef struct sts_cache_mutex_t {
 	apr_global_mutex_t *mutex;
 	char *mutex_filename;
+	apr_shm_t *shm;
+	int *sema;
 } sts_cache_mutex_t;
 
 /* create the cache lock context */
@@ -71,6 +73,8 @@ sts_cache_mutex_t *sts_cache_mutex_create(apr_pool_t *pool) {
 	sts_cache_mutex_t *ctx = apr_pcalloc(pool, sizeof(sts_cache_mutex_t));
 	ctx->mutex = NULL;
 	ctx->mutex_filename = NULL;
+	ctx->shm = NULL;
+	ctx->sema = NULL;
 	return ctx;
 }
 
@@ -109,6 +113,15 @@ apr_byte_t sts_cache_mutex_post_config(server_rec *s, sts_cache_mutex_t *m,
 	}
 #endif
 
+	rv = apr_shm_create(&m->shm, sizeof(int), NULL, s->process->pool);
+	if (rv != APR_SUCCESS) {
+		sts_serror(s, "apr_shm_create failed to create shared memory segment");
+		return FALSE;
+	}
+
+	m->sema = apr_shm_baseaddr_get(m->shm);
+	*m->sema = 1;
+
 	return TRUE;
 }
 
@@ -126,9 +139,22 @@ apr_status_t sts_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 		sts_serror(s,
 				"apr_global_mutex_child_init failed to reopen mutex on file %s",
 				m->mutex_filename);
+	} else {
+		apr_global_mutex_lock(m->mutex);
+		m->sema = apr_shm_baseaddr_get(m->shm);
+		(*m->sema)++;
+		//sts_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m->mutex, s);
+		apr_global_mutex_unlock(m->mutex);
 	}
 
 	return rv;
+}
+
+#define OIDC_CACHE_ERROR_STR_MAX 512
+
+static char * sts_cache_status2str(apr_status_t statcode) {
+	char buf[OIDC_CACHE_ERROR_STR_MAX];
+	return apr_strerror(statcode, buf, OIDC_CACHE_ERROR_STR_MAX);
 }
 
 /*
@@ -138,10 +164,9 @@ apr_byte_t sts_cache_mutex_lock(request_rec *r, sts_cache_mutex_t *m) {
 
 	apr_status_t rv = apr_global_mutex_lock(m->mutex);
 
-	if (rv != APR_SUCCESS) {
-		sts_error(r, "apr_global_mutex_lock() failed [%d]", rv);
-		return FALSE;
-	}
+	if (rv != APR_SUCCESS)
+		sts_error(r, "apr_global_mutex_lock() failed: %s (%d)",
+				sts_cache_status2str(rv), rv);
 
 	return TRUE;
 }
@@ -153,10 +178,9 @@ apr_byte_t sts_cache_mutex_unlock(request_rec *r, sts_cache_mutex_t *m) {
 
 	apr_status_t rv = apr_global_mutex_unlock(m->mutex);
 
-	if (rv != APR_SUCCESS) {
-		sts_error(r, "apr_global_mutex_unlock() failed [%d]", rv);
-		return FALSE;
-	}
+	if (rv != APR_SUCCESS)
+		sts_error(r, "apr_global_mutex_unlock() failed: %s (%d)",
+				sts_cache_status2str(rv), rv);
 
 	return TRUE;
 }
@@ -169,14 +193,25 @@ apr_byte_t sts_cache_mutex_destroy(server_rec *s, sts_cache_mutex_t *m) {
 	apr_status_t rv = APR_SUCCESS;
 
 	if (m->mutex != NULL) {
-		rv = apr_global_mutex_destroy(m->mutex);
-		if (rv != APR_SUCCESS) {
-			sts_swarn(s, "apr_global_mutex_destroy failed: [%d]", rv);
+
+		apr_global_mutex_lock(m->mutex);
+		(*m->sema)--;
+		//sts_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m->mutex, s);
+		apr_global_mutex_unlock(m->mutex);
+
+		if ((m->shm != NULL) && (*m->sema == 0)) {
+
+			rv = apr_global_mutex_destroy(m->mutex);
+			sts_sdebug(s, "apr_global_mutex_destroy returned :%d", rv);
+			m->mutex = NULL;
+
+			rv = apr_shm_destroy(m->shm);
+			sts_sdebug(s, "apr_shm_destroy for semaphore returned: %d", rv);
+			m->shm = NULL;
 		}
-		m->mutex = NULL;
 	}
 
-	return rv;
+	return APR_SUCCESS;
 }
 
 typedef struct sts_cache_cfg_shm_t {

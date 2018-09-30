@@ -1,3 +1,7 @@
+9/30/2018
+- update shm cache so it supports graceful restarts, see: https://github.com/zmartzone/mod_auth_openidc/issues/296
+- version 0.9.3
+
 9/29/2018
 - run at post_read phase instead of fixup phase, except if no source token was (yet) found in an env var
 - version 0.9.2
