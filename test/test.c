@@ -92,7 +92,8 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	cfg->mode = 0;
 	cfg->wstrust_endpoint = "https://localhost:9031/pf/sts.wst";
 	cfg->wstrust_applies_to = "localhost:default:entityId";
-	cfg->wstrust_token_type = "urn:bogus:token";
+	//cfg->wstrust_token_type = "urn:bogus:token";
+	cfg->wstrust_token_type = "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0";
 	cfg->wstrust_value_type =
 			"urn:pingidentity.com:oauth2:grant_type:validate_bearer";
 

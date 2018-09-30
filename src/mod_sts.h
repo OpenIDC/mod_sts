@@ -75,6 +75,8 @@ extern module AP_MODULE_DECLARE_DATA sts_module;
 
 #define sts_log(r, level, fmt, ...) ap_log_rerror(APLOG_MARK, level, 0, r,"# %s: %s", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))
 #define sts_slog(s, level, fmt, ...) ap_log_error(APLOG_MARK, level, 0, s, "## %s: %s", __FUNCTION__, apr_psprintf(s->process->pool, fmt, ##__VA_ARGS__))
+//#define sts_log(r, level, fmt, ...) fprintf(stderr, "# %s: %s\n", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))
+//#define sts_slog(s, level, fmt, ...) fprintf(stderr, "## %s: %s\n", __FUNCTION__, apr_psprintf(s->process->pool, fmt, ##__VA_ARGS__))
 
 #define sts_debug(r, fmt, ...) sts_log(r, APLOG_DEBUG, fmt, ##__VA_ARGS__)
 #define sts_info(r, fmt, ...)  sts_log(r, APLOG_INFO, fmt, ##__VA_ARGS__)

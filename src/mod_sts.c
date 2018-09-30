@@ -43,7 +43,6 @@
  *
  **************************************************************************/
 
-// TOOD: ws-trust source tokens can only be presented as BinarySecurityToken's; should we support native SAML 2.0 etc.?
 // TODO: support consuming a source token from a POST parameter (difficult not to consume the POST data...)?
 #include "mod_sts.h"
 
@@ -255,6 +254,12 @@ static const char *sts_set_string_slot(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			cmd->server->module_config, &sts_module);
+	//	if ((arg == NULL) || (apr_strnatcmp("", arg) == 0)) {
+	//		int offset = (int) (long) cmd->info;
+	//		char **ptr = (char **) ((char *) cfg + offset);
+	//		*ptr = "";
+	//		return NULL;
+	//	}
 	return ap_set_string_slot(cmd, cfg, arg);
 }
 
@@ -808,6 +813,9 @@ static void sts_set_target_token_in_cookie(request_rec *r, char *target_token) {
 static int sts_set_target_token(request_rec *r, char *target_token) {
 	int set_target_token_in = sts_get_set_target_token_in(r);
 
+	if (target_token == NULL)
+		return DECLINED;
+
 	if (set_target_token_in & STS_CONFIG_TOKEN_ENVVAR)
 		sts_set_target_token_in_envvar(r, target_token);
 
@@ -850,8 +858,9 @@ static int sts_handler(request_rec *r, char **source_token) {
 			return HTTP_UNAUTHORIZED;
 		}
 
-		sts_cache_shm_set(r, STS_CACHE_SECTION, cache_key, target_token,
-				apr_time_now() + apr_time_from_sec(sts_get_cache_expires_in(r)));
+		if (target_token != NULL)
+			sts_cache_shm_set(r, STS_CACHE_SECTION, cache_key, target_token,
+					apr_time_now() + apr_time_from_sec(sts_get_cache_expires_in(r)));
 	} else {
 		sts_debug(r, "cache hit (%s)", cache_key);
 	}
@@ -1010,7 +1019,7 @@ static apr_byte_t sts_add_signed_jwt_and_release_jwk(request_rec *r,
 
 	rc = TRUE;
 
-	out:
+out:
 
 	if (json)
 		json_decref(json);
@@ -1407,7 +1416,7 @@ static const command_rec sts_cmds[] =
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_token_type),
 				RSRC_CONF,
 				"Set the WS-Trust Token Type."),
-		AP_INIT_TAKE1(
+		AP_INIT_ITERATE(
 				STSWSTrustValueType,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_value_type),
