@@ -1416,7 +1416,7 @@ static const command_rec sts_cmds[] =
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_token_type),
 				RSRC_CONF,
 				"Set the WS-Trust Token Type."),
-		AP_INIT_ITERATE(
+		AP_INIT_TAKE1(
 				STSWSTrustValueType,
 				sts_set_string_slot,
 				(void*)APR_OFFSETOF(sts_server_config, wstrust_value_type),

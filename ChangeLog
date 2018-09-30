@@ -1,4 +1,7 @@
 9/30/2018
+- use non-binary security token as default WS-Trust source token
+
+9/30/2018
 - WS-Trust support for source tokens other than OAuth tokens e.g SAML 2.0 or UserName tokens
 - WS-Trust support for non-BinarySecurityToken target tokens
 - version 0.9.4

@@ -57,15 +57,11 @@
 #define STS_WSTRUST_TOKEN_TYPE_SAML20            "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0"
 #define STS_WSTRUST_TOKEN_TYPE_SAML11            "http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV1.1"
 
-#define STS_WSTRUST_VALUE_TYPE_OAUTH_BEARER	 	 "urn:pingidentity.com:oauth2:grant_type:validate_bearer"
-// curl -k -H "token: <wsse:UsernameToken xmlns:wsu=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\" wsu:Id=\"Me\"><wsse:Username>joe</wsse:Username><wsse:Password>2Federate</wsse:Password></wsse:UsernameToken>" https://localhost.zmartzone.eu/dada/phpinfo.php
-#define STS_WSTRUST_VALUE_TYPE_USERNAME          "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#UsernameToken"
-
 #define STS_WSTRUST_ENDPOINT_DEFAULT             NULL
 #define STS_WSTRUST_ENDPOINT_AUTH_DEFAULT        STS_ENDPOINT_AUTH_NONE
 #define STS_WSTRUST_APPLIES_TO_DEFAULT           NULL
 #define STS_WSTRUST_TOKEN_TYPE_DEFAULT           STS_WSTRUST_TOKEN_TYPE_SAML20
-#define STS_WSTRUST_VALUE_TYPE_DEFAULT           STS_WSTRUST_VALUE_TYPE_OAUTH_BEARER
+#define STS_WSTRUST_VALUE_TYPE_DEFAULT           NULL
 
 #define STS_WSTRUST_XML_SOAP_NS				     "http://www.w3.org/2003/05/soap-envelope"
 #define STS_WSTRUST_XML_WSTRUST_NS			     "http://docs.oasis-open.org/ws-sx/ws-trust/200512"
@@ -88,16 +84,6 @@ int sts_wstrust_config_check_vhost(apr_pool_t *pool, server_rec *s,
 		sts_serror(s, STSWSTrustAppliesTo " must be set in WS-Trust mode");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
-	/*
-	 if (cfg->wstrust_token_type == NULL) {
-	 sts_serror(s, STSWSTrustTokenType " must be set in WS-Trust mode");
-	 return HTTP_INTERNAL_SERVER_ERROR;
-	 }
-	 if (cfg->wstrust_value_type == NULL) {
-	 sts_serror(s, STSWSTrustValueType " must be set in WS-Trust mode");
-	 return HTTP_INTERNAL_SERVER_ERROR;
-	 }
-	 */
 	return OK;
 }
 
@@ -158,7 +144,7 @@ const char *sts_wstrust_get_rst_binary(request_rec *r, const char *token,
 
 const char *sts_wstrust_get_rst(request_rec *r, const char *token) {
 	const char *value_type = sts_wstrust_get_value_type(r);
-	if (apr_strnatcmp(value_type, STS_WSTRUST_VALUE_TYPE_USERNAME) == 0)
+	if (value_type == NULL)
 		return token;
 	return sts_wstrust_get_rst_binary(r, token, value_type);
 }
@@ -239,14 +225,12 @@ static int sts_execute_xpath_expression(request_rec *r, const char *sXmlStr,
 	xmlBufferPtr xmlBuf = NULL;
 	int rv = -1;
 
-	/* Load XML document */
 	doc = xmlParseMemory(sXmlStr, strlen(sXmlStr));
 	if (doc == NULL) {
 		sts_error(r, "Error: unable to parse string \"%s\"\n", sXmlStr);
 		goto out;
 	}
 
-	/* Create xpath evaluation context */
 	xpathCtx = xmlXPathNewContext(doc);
 	if (xpathCtx == NULL) {
 		sts_error(r, "Error: unable to create new XPath context\n");
@@ -271,7 +255,6 @@ static int sts_execute_xpath_expression(request_rec *r, const char *sXmlStr,
 		goto out;
 	}
 
-	/* Evaluate xpath expression */
 	xmlPathExpr = xmlCharStrdup(sPathExpr);
 	xpathObj = xmlXPathEvalExpression(xmlPathExpr, xpathCtx);
 	if (xpathObj == NULL) {
@@ -327,12 +310,10 @@ out:
 		STS_WSTRUST_EXPR_TOKEN_TEMPLATE \
 		"/wsse:BinarySecurityToken[@ValueType='%s']"
 
+// TBD: parse timestamps etc. in the RSTR or leave that (still) up to the token recipient
 static int sts_wstrust_parse_token(request_rec *r, const char *response,
 		const char *token_type, char **rtoken) {
-	char rc = FALSE;
 	char *rvalue = NULL;
-
-	// TBD: parse timestamps etc in the RSTR or leave that (still) up to the token recipient
 
 	xmlInitParser();
 
@@ -340,44 +321,38 @@ static int sts_wstrust_parse_token(request_rec *r, const char *response,
 			|| (apr_strnatcmp(token_type, STS_WSTRUST_TOKEN_TYPE_SAML11) == 0)) {
 
 		// straight copy of the complete (XML) token
-		if (sts_execute_xpath_expression(r, response,
-				STS_WSTRUST_EXPR_TOKEN_TEMPLATE, &rvalue) < 0) {
+		if ((sts_execute_xpath_expression(r, response,
+				STS_WSTRUST_EXPR_TOKEN_TEMPLATE, &rvalue) < 0) || (rvalue == NULL)) {
 			sts_error(r, "sts_execute_xpath_expression failed!");
 			goto out;
 		}
 
-		if (rvalue != NULL) {
-			*rtoken = apr_pstrdup(r->pool, rvalue);
-			rc = TRUE;
-		}
+		*rtoken = apr_pstrdup(r->pool, rvalue);
 
 	} else {
 
-		// base64 decode BinarySecurityToken
-		if (sts_execute_xpath_expression(r, response,
+		// base64 decode BinarySecurityToken; TBD: possibly do this in an optional/configurable way
+		if ((sts_execute_xpath_expression(r, response,
 				apr_psprintf(r->pool, STS_WSTRUST_EXPR_BINARY_TOKEN_TEMPLATE,
-						token_type), &rvalue) < 0) {
+						token_type), &rvalue) < 0) || (rvalue == NULL)) {
 			sts_error(r, "sts_execute_xpath_expression failed!");
 			goto out;
 		}
 
-		if (rvalue != NULL) {
-			*rtoken = apr_palloc(r->pool, apr_base64_decode_len(rvalue));
-			apr_base64_decode(*rtoken, rvalue);
-			rc = TRUE;
-		}
+		*rtoken = apr_palloc(r->pool, apr_base64_decode_len(rvalue));
+		apr_base64_decode(*rtoken, rvalue);
+
 	}
 
 out:
 
 	xmlCleanupParser();
 
-	return rc;
+	return (rvalue != NULL);
 }
 
 apr_byte_t sts_wstrust_exec(request_rec *r, sts_server_config *cfg,
 		const char *token, char **rtoken) {
-
 	char *response = NULL;
 	const char *basic_auth = NULL;
 	const char *client_cert = NULL;
