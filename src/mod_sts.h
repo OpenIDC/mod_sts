@@ -91,6 +91,7 @@ extern module AP_MODULE_DECLARE_DATA sts_module;
 #define STS_HEADER_COOKIE                       "Cookie"
 #define STS_HEADER_SOAP_ACTION                  "soapAction"
 #define STS_HEADER_CONTENT_TYPE                 "Content-Type"
+#define STS_HEADER_CONTENT_LENGTH               "Content-Length"
 #define STS_HEADER_HOST                         "Host"
 #define STS_HEADER_X_FORWARDED_PROTO            "X-Forwarded-Proto"
 #define STS_HEADER_X_FORWARDED_HOST             "X-Forwarded-Host"
@@ -245,6 +246,8 @@ char *sts_util_http_form_encoded_data(request_rec *r,
 void sts_util_hdr_in_set(const request_rec *r, const char *name,
 		const char *value);
 const char *sts_util_hdr_in_get(const request_rec *r, const char *name);
+const char *sts_util_hdr_in_content_type_get(const request_rec *r);
+apr_byte_t sts_util_read_post_params(request_rec *r, apr_table_t *table);
 
 const char *sts_get_config_method_option(request_rec *r,
 		apr_hash_t *config_method_options, const char *type, const char *key,

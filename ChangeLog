@@ -1,5 +1,7 @@
-9/30/2018
+10/01/2018
 - use non-binary security token as default WS-Trust source token
+- support adding the target token in a POST parameter (e.g. an access token) 
+- version 0.9.5
 
 9/30/2018
 - WS-Trust support for source tokens other than OAuth tokens e.g SAML 2.0 or UserName tokens

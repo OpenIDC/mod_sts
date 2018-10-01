@@ -532,6 +532,10 @@ const char *sts_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
 			",");
 }
 
+const char *sts_util_hdr_in_content_type_get(const request_rec *r) {
+	return sts_util_hdr_in_get(r, STS_HEADER_CONTENT_TYPE);
+}
+
 const char *sts_util_hdr_in_host_get(const request_rec *r) {
 	return sts_util_hdr_in_get(r, STS_HEADER_HOST);
 }
@@ -665,4 +669,62 @@ char *sts_generate_random_string(apr_pool_t *pool, int len) {
 	char *enc = apr_palloc(pool, enc_len);
 	apr_base64_encode(enc, (const char *) bytes, len);
 	return apr_pstrndup(pool, enc, len);
+}
+
+#define STS_MAX_POST_DATA_LEN 1024 * 1024
+
+static apr_byte_t sts_util_read(request_rec *r, char **rbuf) {
+	apr_size_t bytes_read;
+	apr_size_t bytes_left;
+	apr_size_t len;
+	long read_length;
+
+	if (ap_setup_client_block(r, REQUEST_CHUNKED_DECHUNK) != OK)
+		return FALSE;
+
+	len = ap_should_client_block(r) ? r->remaining : 0;
+
+	if (len > STS_MAX_POST_DATA_LEN) {
+		sts_error(r, "POST parameter value is too large: %lu bytes (max=%d)",
+				(unsigned long ) len, STS_MAX_POST_DATA_LEN);
+		return FALSE;
+	}
+
+	*rbuf = (char *) apr_palloc(r->pool, len + 1);
+	if (*rbuf == NULL) {
+		sts_error(r, "could not allocate memory for %lu bytes of POST data.",
+				(unsigned long )len);
+		return FALSE;
+	}
+	(*rbuf)[len] = '\0';
+
+	bytes_read = 0;
+	bytes_left = len;
+	while (bytes_left > 0) {
+		read_length = ap_get_client_block(r, &(*rbuf)[bytes_read], bytes_left);
+		if (read_length == 0) {
+			(*rbuf)[bytes_read] = '\0';
+			break;
+		} else if (read_length < 0) {
+			sts_error(r, "failed to read POST data from client");
+			return FALSE;
+		}
+		bytes_read += read_length;
+		bytes_left -= read_length;
+	}
+
+	return TRUE;
+}
+
+apr_byte_t sts_util_read_post_params(request_rec *r, apr_table_t *table) {
+	char *data = NULL;
+
+	if (r->method_number != M_POST)
+		return FALSE;
+
+	if (sts_util_read(r, &data) != TRUE)
+		return FALSE;
+
+	return table ?
+			sts_util_read_form_encoded_params(r->pool, table, data) : FALSE;
 }

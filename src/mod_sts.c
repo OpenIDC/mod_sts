@@ -43,7 +43,6 @@
  *
  **************************************************************************/
 
-// TODO: support consuming a source token from a POST parameter (difficult not to consume the POST data...)?
 #include "mod_sts.h"
 
 #include <cjose/cjose.h>
@@ -77,8 +76,10 @@ static const int STS_CONFIG_TOKEN_ENVVAR = 1;
 static const int STS_CONFIG_TOKEN_HEADER = 2;
 #define STS_CONFIG_TOKEN_QUERY_STR                 "query"
 static const int STS_CONFIG_TOKEN_QUERY = 4;
+#define STS_CONFIG_TOKEN_POST_STR                  "post"
+static const int STS_CONFIG_TOKEN_POST = 8;
 #define STS_CONFIG_TOKEN_COOKIE_STR                "cookie"
-static const int STS_CONFIG_TOKEN_COOKIE = 8;
+static const int STS_CONFIG_TOKEN_COOKIE = 16;
 
 #define STS_DEFAULT_ACCEPT_SOURCE_TOKEN_IN         (STS_CONFIG_TOKEN_ENVVAR | STS_CONFIG_TOKEN_HEADER)
 #define STS_DEFAULT_SET_TARGET_TOKEN_IN            (STS_CONFIG_TOKEN_ENVVAR | STS_CONFIG_TOKEN_COOKIE)
@@ -95,10 +96,12 @@ static const int STS_CONFIG_TOKEN_COOKIE = 8;
 #define STS_SOURCE_TOKEN_COOKIE_NAME_DEFAULT       "PA.global"
 #define STS_SOURCE_TOKEN_ENVVAR_NAME_DEFAULT       "OIDC_access_token"
 #define STS_SOURCE_TOKEN_QUERY_PARAMNAME_DEFAULT   "access_token"
+#define STS_SOURCE_TOKEN_POST_PARAMNAME_DEFAULT    "access_token"
 
 #define STS_TARGET_TOKEN_COOKIE_NAME_DEFAULT       "sts_token"
 #define STS_TARGET_TOKEN_ENVVAR_NAME_DEFAULT       "MOD_STS_TARGET_TOKEN"
-#define STS_TARGET_TOKEN_QUERY_PARAM_NAME_DEFAULT  "access_token"
+#define STS_TARGET_TOKEN_QUERY_PARAMNAME_DEFAULT   "access_token"
+#define STS_TARGET_TOKEN_POST_PARAMNAME_DEFAULT    "access_token"
 #define STS_TARGET_TOKEN_HEADER_NAME_DEFAULT       STS_HEADER_AUTHORIZATION
 #define STS_TARGET_TOKEN_HEADER_TYPE_DEFAULT       STS_HEADER_AUTHORIZATION_BEARER
 
@@ -322,6 +325,9 @@ static apr_hash_t *sts_get_allowed_token_options(apr_pool_t *pool,
 		} else if (apr_strnatcmp(STS_CONFIG_TOKEN_QUERY_STR, allowed[i]) == 0) {
 			apr_hash_set(methods, STS_CONFIG_TOKEN_QUERY_STR,
 					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_QUERY);
+		} else if (apr_strnatcmp(STS_CONFIG_TOKEN_POST_STR, allowed[i]) == 0) {
+			apr_hash_set(methods, STS_CONFIG_TOKEN_POST_STR,
+					APR_HASH_KEY_STRING, &STS_CONFIG_TOKEN_POST);
 		} else if (apr_strnatcmp(STS_CONFIG_TOKEN_COOKIE_STR, allowed[i])
 				== 0) {
 			apr_hash_set(methods, STS_CONFIG_TOKEN_COOKIE_STR,
@@ -411,6 +417,7 @@ static const char *sts_set_accept_source_token_in(cmd_parms *cmd, void *m,
 			STS_CONFIG_TOKEN_ENVVAR_STR,
 			STS_CONFIG_TOKEN_HEADER_STR,
 			STS_CONFIG_TOKEN_QUERY_STR,
+			STS_CONFIG_TOKEN_POST_STR,
 			STS_CONFIG_TOKEN_COOKIE_STR,
 			NULL };
 	return sts_set_method_options(cmd, arg, options,
@@ -425,6 +432,7 @@ static const char *sts_set_set_target_token_in(cmd_parms *cmd, void *m,
 			STS_CONFIG_TOKEN_ENVVAR_STR,
 			STS_CONFIG_TOKEN_HEADER_STR,
 			STS_CONFIG_TOKEN_QUERY_STR,
+			STS_CONFIG_TOKEN_POST_STR,
 			STS_CONFIG_TOKEN_COOKIE_STR,
 			NULL };
 	return sts_set_method_options(cmd, arg, options,
@@ -650,6 +658,7 @@ static char *sts_get_source_token_from_query(request_rec *r) {
 			STS_CONFIG_TOKEN_QUERY_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
 			STS_SOURCE_TOKEN_QUERY_PARAMNAME_DEFAULT);
+
 	source_token = apr_pstrdup(r->pool,
 			apr_table_get(params, query_param_name));
 
@@ -661,6 +670,62 @@ static char *sts_get_source_token_from_query(request_rec *r) {
 				query_param_name);
 		apr_table_unset(params, query_param_name);
 		r->args = sts_util_http_form_encoded_data(r, params);
+	}
+
+	return source_token;
+}
+
+#define STS_USERDATA_POST_PARAMS_KEY "sts_userdata_post_params"
+
+static void sts_userdata_set_post_param(request_rec *r,
+		const char *post_param_name, const char *post_param_value) {
+	apr_table_t *userdata_post_params = NULL;
+	apr_pool_userdata_get((void **) &userdata_post_params,
+			STS_USERDATA_POST_PARAMS_KEY, r->pool);
+	if (userdata_post_params == NULL)
+		userdata_post_params = apr_table_make(r->pool, 1);
+	apr_table_set(userdata_post_params, post_param_name, post_param_value);
+	apr_pool_userdata_set(userdata_post_params, STS_USERDATA_POST_PARAMS_KEY,
+			NULL, r->pool);
+
+}
+
+static char *sts_get_source_token_from_post(request_rec *r) {
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+	char *source_token = NULL;
+
+	sts_debug(r, "enter");
+
+	const char *content_type = sts_util_hdr_in_content_type_get(r);
+	if ((r->method_number != M_POST) || (apr_strnatcmp(content_type,
+			STS_CONTENT_TYPE_FORM_ENCODED) != 0)) {
+		sts_debug(r,
+				"no HTTP POST/%s so cannot get the source token from the POST parameters",
+				STS_CONTENT_TYPE_FORM_ENCODED);
+		return NULL;
+	}
+
+	apr_table_t *params = apr_table_make(r->pool, 8);
+	sts_util_read_post_params(r, params);
+
+	const char *post_param_name = sts_get_config_method_option(r,
+			dir_cfg->accept_source_token_in_options,
+			STS_CONFIG_TOKEN_POST_STR,
+			STS_CONFIG_TOKEN_OPTION_NAME,
+			STS_SOURCE_TOKEN_POST_PARAMNAME_DEFAULT);
+
+	source_token = apr_pstrdup(r->pool, apr_table_get(params, post_param_name));
+
+	if (source_token == NULL) {
+		sts_debug(r, "no source token found in POST parameter: %s",
+				post_param_name);
+	} else if (sts_get_strip_source_token(r) != 0) {
+		// TBD: would work if we can remove stuff across brigades/buckets in the input filter...
+		// sts_userdata_set_post_param(r, post_param_name, NULL);
+		sts_warn(r,
+				"stripping post param %s from outgoing request is not supported!",
+				post_param_name);
 	}
 
 	return source_token;
@@ -702,6 +767,11 @@ static char *sts_get_source_token(request_rec *r) {
 	if ((source_token == NULL)
 			&& (accept_source_token_in & STS_CONFIG_TOKEN_QUERY)) {
 		source_token = sts_get_source_token_from_query(r);
+	}
+
+	if ((source_token == NULL)
+			&& (accept_source_token_in & STS_CONFIG_TOKEN_POST)) {
+		source_token = sts_get_source_token_from_post(r);
 	}
 
 	if ((source_token == NULL)
@@ -774,7 +844,7 @@ static void sts_set_target_token_in_query(request_rec *r, char *target_token) {
 			dir_cfg->set_target_token_in_options,
 			STS_CONFIG_TOKEN_QUERY_STR,
 			STS_CONFIG_TOKEN_OPTION_NAME,
-			STS_TARGET_TOKEN_QUERY_PARAM_NAME_DEFAULT);
+			STS_TARGET_TOKEN_QUERY_PARAMNAME_DEFAULT);
 
 	sts_debug(r, "set query parameter to backend: %s=%s", query_param_name,
 			target_token);
@@ -787,6 +857,33 @@ static void sts_set_target_token_in_query(request_rec *r, char *target_token) {
 			(r->args != NULL) ?
 					apr_psprintf(r->pool, "%s&%s", r->args, encoded) :
 					apr_pstrdup(r->pool, encoded);
+}
+
+static void sts_set_target_token_in_post(request_rec *r, char *target_token) {
+	sts_dir_config *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&sts_module);
+
+	sts_debug(r, "enter");
+
+	const char *content_type = sts_util_hdr_in_content_type_get(r);
+	if ((r->method_number != M_POST) || (apr_strnatcmp(content_type,
+			STS_CONTENT_TYPE_FORM_ENCODED) != 0)) {
+		sts_debug(r,
+				"no HTTP POST/%s so cannot set the target token in a POST parameters",
+				STS_CONTENT_TYPE_FORM_ENCODED);
+		return;
+	}
+
+	const char *post_param_name = sts_get_config_method_option(r,
+			dir_cfg->set_target_token_in_options,
+			STS_CONFIG_TOKEN_POST_STR,
+			STS_CONFIG_TOKEN_OPTION_NAME,
+			STS_TARGET_TOKEN_POST_PARAMNAME_DEFAULT);
+
+	sts_debug(r, "set POST parameter to backend: %s=%s", post_param_name,
+			target_token);
+
+	sts_userdata_set_post_param(r, post_param_name, target_token);
 }
 
 static void sts_set_target_token_in_cookie(request_rec *r, char *target_token) {
@@ -824,6 +921,10 @@ static int sts_set_target_token(request_rec *r, char *target_token) {
 
 	if (set_target_token_in & STS_CONFIG_TOKEN_QUERY) {
 		sts_set_target_token_in_query(r, target_token);
+	}
+
+	if (set_target_token_in & STS_CONFIG_TOKEN_POST) {
+		sts_set_target_token_in_post(r, target_token);
 	}
 
 	if (set_target_token_in & STS_CONFIG_TOKEN_COOKIE)
@@ -1348,12 +1449,110 @@ static void *sts_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	return c;
 }
 
+static const char stsFilterName[] = "sts_filter_in_filter";
+
+static void sts_filter_in_insert_filter(request_rec *r) {
+
+	if (ap_is_initial_req(r) == 0)
+		return;
+
+	if (sts_get_enabled(r) != 1)
+		return;
+
+	apr_table_t *userdata_post_params = NULL;
+	apr_pool_userdata_get((void **) &userdata_post_params,
+			STS_USERDATA_POST_PARAMS_KEY, r->pool);
+	if (userdata_post_params == NULL)
+		return;
+
+	ap_add_input_filter(stsFilterName, NULL, r, r->connection);
+}
+
+typedef struct sts_filter_in_context {
+	apr_bucket_brigade *pbbTmp;
+	apr_size_t nbytes;
+} sts_filter_in_context;
+
+static apr_status_t sts_filter_in_filter(ap_filter_t *f,
+		apr_bucket_brigade *brigade, ap_input_mode_t mode,
+		apr_read_type_e block, apr_off_t nbytes) {
+	sts_filter_in_context *ctx = NULL;
+	apr_bucket *b_in = NULL, *b_out = NULL;
+	char *buf = NULL;
+	apr_table_t *userdata_post_params = NULL;
+	apr_status_t rc = APR_SUCCESS;
+
+	if (!(ctx = f->ctx)) {
+		f->ctx = ctx = apr_palloc(f->r->pool, sizeof *ctx);
+		ctx->pbbTmp = apr_brigade_create(f->r->pool,
+				f->r->connection->bucket_alloc);
+		ctx->nbytes = 0;
+	}
+
+	if (APR_BRIGADE_EMPTY(ctx->pbbTmp)) {
+		rc = ap_get_brigade(f->next, ctx->pbbTmp, mode, block, nbytes);
+
+		if (mode == AP_MODE_EATCRLF || rc != APR_SUCCESS)
+			return rc;
+	}
+
+	while (!APR_BRIGADE_EMPTY(ctx->pbbTmp)) {
+
+		b_in = APR_BRIGADE_FIRST(ctx->pbbTmp);
+
+		if (APR_BUCKET_IS_EOS(b_in)) {
+
+			APR_BUCKET_REMOVE(b_in);
+
+			// TODO: this relies on the precondition that one post parameter is already there...
+			if (ctx->nbytes > 0) {
+				apr_pool_userdata_get((void **) &userdata_post_params,
+						STS_USERDATA_POST_PARAMS_KEY, f->r->pool);
+
+				// we wouldn't be filtering if there wasn't any data to add so userdata_post_params != NULL
+				buf = apr_psprintf(f->r->pool, "&%s",
+						sts_util_http_form_encoded_data(f->r,
+								userdata_post_params));
+				b_out = apr_bucket_heap_create(buf, strlen(buf), 0,
+						f->r->connection->bucket_alloc);
+
+				APR_BRIGADE_INSERT_TAIL(brigade, b_out);
+
+				//sts_debug(r, "## adding: %lu post data to existing length: %ld", strlen(buf), ctx->nbytes);
+				ctx->nbytes += strlen(buf);
+
+				if (sts_util_hdr_in_get(f->r, STS_HEADER_CONTENT_LENGTH) != NULL)
+					sts_util_hdr_in_set(f->r, STS_HEADER_CONTENT_LENGTH,
+							apr_psprintf(f->r->pool, "%ld", ctx->nbytes));
+
+				// we can have multiple APR_BUCKET_IS_EOS coming in
+				// so make sure we add our target token only once
+				ctx->nbytes = 0;
+			}
+
+			APR_BRIGADE_INSERT_TAIL(brigade, b_in);
+
+			break;
+		}
+
+		APR_BUCKET_REMOVE(b_in);
+		APR_BRIGADE_INSERT_TAIL(brigade, b_in);
+		ctx->nbytes += b_in->length;
+	}
+
+	return rc;
+}
+
 static void sts_register_hooks(apr_pool_t *p) {
 	ap_hook_post_config(sts_post_config_handler, NULL, NULL, APR_HOOK_LAST);
 	ap_hook_child_init(sts_child_init, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_post_read_request(sts_post_read_request, NULL, NULL, APR_HOOK_LAST);
 	static const char * const aszPre[] = { "mod_auth_openidc.c", NULL };
 	ap_hook_fixups(sts_fixup_handler, aszPre, NULL, APR_HOOK_MIDDLE);
+	ap_hook_insert_filter(sts_filter_in_insert_filter, NULL, NULL,
+			APR_HOOK_MIDDLE);
+	ap_register_input_filter(stsFilterName, sts_filter_in_filter, NULL,
+			AP_FTYPE_RESOURCE);
 }
 
 static const command_rec sts_cmds[] =
