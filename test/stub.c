@@ -227,3 +227,29 @@ AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index,
 		AP_DECLARE(char *) ap_server_root_relative(apr_pool_t *p, const char *file) {
 			return "";
 		}
+
+		AP_DECLARE(int) ap_hook_insert_filter(request_rec *r) {
+			return 0;
+		}
+
+		AP_DECLARE(apr_status_t) ap_get_brigade(ap_filter_t *filter,
+		                                        apr_bucket_brigade *bucket,
+		                                        ap_input_mode_t mode,
+		                                        apr_read_type_e block,
+		                                        apr_off_t readbytes) {
+			return APR_SUCCESS;
+		}
+
+		AP_DECLARE(ap_filter_t *) ap_add_input_filter(const char *name, void *ctx,
+		                                              request_rec *r, conn_rec *c) {
+			return 0;
+		}
+
+
+		AP_DECLARE(ap_filter_rec_t *) ap_register_input_filter(const char *name,
+		                                          ap_in_filter_func filter_func,
+		                                          ap_init_filter_func filter_init,
+		                                          ap_filter_type ftype) {
+			return 0;
+		}
+

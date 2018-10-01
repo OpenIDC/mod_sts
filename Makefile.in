@@ -11,6 +11,9 @@ HDRS = src/mod_sts.h
 # Files to include when making a .tar.gz-file for distribution
 DISTFILES=$(SRC) \
 	$(HDRS) \
+	test/test.c \
+	test/stub.c \
+	sts.conf \
 	configure \
 	configure.ac \
 	Makefile.in \

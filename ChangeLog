@@ -1,3 +1,7 @@
+10/02/2018
+- various corrections related to packaging
+- version 0.9.6
+
 10/01/2018
 - use non-binary security token as default WS-Trust source token
 - support adding the target token in a POST parameter (e.g. an access token) 

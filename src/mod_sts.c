@@ -131,7 +131,10 @@ int sts_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 	sts_server_config *cfg = ap_get_module_config(s->module_config,
 			&sts_module);
 	int rc = OK;
-	switch (cfg->mode) {
+	int mode =
+			(cfg->mode == STS_CONFIG_POS_INT_UNSET) ?
+					STS_CONFIG_DEFAULT_STS_MODE : cfg->mode;
+	switch (mode) {
 	case STS_CONFIG_MODE_WSTRUST:
 		rc = sts_wstrust_config_check_vhost(pool, s, cfg);
 		break;
@@ -142,7 +145,7 @@ int sts_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 		rc = sts_otx_config_check_vhost(pool, s, cfg);
 		break;
 	default:
-		sts_serror(s, "STS mode is set to unsupported value: %d", cfg->mode);
+		sts_serror(s, "STS mode is set to unsupported value: %d", mode);
 		rc = HTTP_INTERNAL_SERVER_ERROR;
 		break;
 

@@ -119,7 +119,7 @@ int main(int argc, char **argv, char **env) {
 
 	if (argc < 2) {
 		printf(" Usage: %s <access_token>\n", argv[0]);
-		exit(-1);
+		exit(0);
 	}
 
 	apr_pool_t *pool = NULL;
