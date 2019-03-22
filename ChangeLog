@@ -1,0 +1,116 @@
+03/21/2019
+- revamp based on liboauth2 1.0.0
+- version 3.0.0
+
+10/02/2018
+- various corrections related to packaging
+- version 0.9.6
+
+10/01/2018
+- use non-binary security token as default WS-Trust source token
+- support adding the target token in a POST parameter (e.g. an access token) 
+- version 0.9.5
+
+9/30/2018
+- WS-Trust support for source tokens other than OAuth tokens e.g SAML 2.0 or UserName tokens
+- WS-Trust support for non-BinarySecurityToken target tokens
+- version 0.9.4
+
+9/30/2018
+- update shm cache so it supports graceful restarts, see: https://github.com/zmartzone/mod_auth_openidc/issues/296
+- version 0.9.3
+
+9/29/2018
+- run at post_read phase instead of fixup phase, except if no source token was (yet) found in an env var
+- version 0.9.2
+
+9/29/2018
+- set defaults to NULL and do per-mode configuration checks on startup
+- version 0.9.1
+
+9/29/2018
+- remove STSROPCRequestParameter, STSOTXRequestParameter and STSResource; merge into STSRequestParameter
+- version 0.9.0
+
+9/29/2018
+- correct resource->aud handling for ROPC flows and add extra params with STSROPCRequestParameter
+- version 0.8.1
+
+9/29/2018
+- correct caching on a per-directory configuration based context
+- version 0.8.0
+
+9/28/2018
+- add name value parameters by AP_INIT_TAKE2 syntax and rename STSOTXRequestParameters to STSOTXRequestParameter
+- version 0.7.6
+
+9/28/2018
+- get subject_token_type request parameter from STSOTXRequestParameters
+- version 0.7.5
+
+9/28/2018
+- support stripping the source token from the outgoing request
+- version 0.7.4
+
+9/28/2018
+- support extra parameters to the OAuth 2.0 token exchange request via STSOTXRequestParameters
+- version 0.7.3
+
+9/28/2018
+- add client_id to OTX request if auth=none; some cleanups
+- version 0.7.2
+
+9/28/2018
+- support private_key_jwt authentication method for ropc/otx
+- version 0.7.1
+
+9/27/2018
+- support client_secret_jwt authentication method for ropc/otx
+- version 0.7.0
+
+9/27/2018
+- split out exchange protocol functions in separate files
+- version 0.6.0
+
+9/27/2018
+- support client authentication methods: basic, post, client cert
+- version 0.5.1
+
+9/27/2018
+- support multiple target token representations
+- support multiple named options in source and target tokens
+- adapt README.md to generic tokens
+- version 0.5.0
+
+9/25/2018
+- re-factor helper functions into util.c
+- parse options on incoming access token presentation method (e.g. cookie:PA.global)
+- version 0.4.2
+
+9/25/2018
+- add configurable resource parameter support with STSResource
+- version 0.4.1
+
+9/25/2018
+- add STSSSLValidate server option and configurable STSHTTPTimeOut
+- correctly form-encode POST parameters
+- add support for draft IETF token exchange protocol
+- version 0.4.0
+
+9/24/2018
+- pass client_id in username
+- update README.md and add sts.conf
+- support setting WS-Trust ValueType using STSWSTrustValueType
+- version 0.3.1
+
+9/23/2018
+- support configurable access token methods
+- first iteration of ROPC mode
+- version 0.3.0
+
+8/9/2018
+- allow configuration of multiple exchange protocols (and support only one yet)
+- version 0.2.0
+
+3/27/2017
+- initial import of version 0.1.0
