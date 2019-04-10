@@ -9,6 +9,14 @@ AM_LDFLAGS = --coverage
 
 LDADD = $(CODE_COVERAGE_LIBS)
 
+includesubdir = $(includedir)/oauth2
+
+includesub_HEADERS = \
+	src/liboauth2-sts/include/oauth2/sts.h
+	
+nodist_includesub_HEADERS = \
+	src/config.h
+
 lib_LTLIBRARIES = @PACKAGE_NAME@.la
 
 @PACKAGE_NAME@_la_CFLAGS = @OAUTH2_CFLAGS@ @OAUTH2_APACHE_CFLAGS@ @APR_CFLAGS@ @XML_CFLAGS@ -Isrc/liboauth2-sts/include
