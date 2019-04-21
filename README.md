@@ -41,9 +41,62 @@ REST based IETF standard, see: [https://www.ietf.org/id/draft-ietf-oauth-token-e
 ##### OAuth 2.0 Resource Owner Password Credentials (ROPC)
 Essentially a workaround for communicating with servers that don't support any of the two options above but can be configured/programmed to validate a token presented in the `password` parameter of the OAuth 2.0 Resource Owner Password Credentials grant and return a target token in the `access token` claim of the token response.
 
-## Configuration
-For an exhaustive description of all configuration options, see the file `sts.conf`
-in this directory. This file can also serve as an include file for `httpd.conf`.
+## Quickstart
+
+WS-Trust STS using HTTP Basic authentication.
+
+```apache
+LogLevel sts:debug
+
+<Location /sts/wstrust>	
+	STSType wstrust
+	STSWSTrustEndpoint https://pingfed:9031/pf/sts.wst
+	STSSSLValidateServer Off
+	STSWSTrustEndpointAuth basic username=wstrust&password=2Federate
+	STSWSTrustAppliesTo urn:pingfed
+	STSWSTrustValueType urn:pingidentity.com:oauth2:grant_type:validate_bearer
+	STSWSTrustTokenType urn:bogus:token
+
+	ProxyPass http://echo:8080/headers
+	ProxyPassReverse http://echo:8080/headers
+</Location>
+```
+
+OAuth 2.0 Resource Owner Password Credentials based STS using `client_secret_basic` authentication.
+
+```apache
+LogLevel sts:debug
+
+<Location /sts/ropc>
+	STSType ropc
+	STSROPCEndpoint https://pingfed:9031/as/token.oauth2
+	STSSSLValidateServer Off
+	STSROPCEndpointAuth client_secret_basic client_id=sts0&client_secret=2Federate
+	STSROPCUsername dummy
+
+	ProxyPass http://echo:8080/headers
+	ProxyPassReverse http://echo:8080/headers	
+</Location>
+```
+
+OAuth 2.0 Token Exchange using `client_secret_basic` authentication.
+
+
+```apache
+LogLevel sts:debug
+
+<Location /sts/otx>
+	STSType otx
+	STSOTXEndpoint https://keycloak:8443/auth/realms/master/protocol/openid-connect/token
+	STSSSLValidateServer Off
+	STSOTXEndpointAuth client_secret_basic client_id=otxclient&client_secret=2Federate
+
+	ProxyPass http://echo:8080/headers
+	ProxyPassReverse http://echo:8080/headers
+</Location>
+```
+
+For a detailed overview of configuration options see the `sts.conf` Apache configuration file in this directory.
 
 ## Support
 
