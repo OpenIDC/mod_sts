@@ -54,6 +54,8 @@
 #define STS_ROPC_USERNAME         "username"
 #define STS_ROPC_PASSWORD         "password"
 
+#define STS_ROPC_USERNAME_ENV_VAR "STS_ROPC_USERNAME"
+
 int sts_ropc_config_check_vhost(apr_pool_t *pool, server_rec *s,
 		sts_server_config *cfg) {
 	if (cfg->ropc_endpoint == NULL) {
@@ -94,6 +96,10 @@ static const char * sts_ropc_get_client_id(request_rec *r) {
 static const char * sts_ropc_get_username(request_rec *r) {
 	sts_server_config *cfg = (sts_server_config *) ap_get_module_config(
 			r->server->module_config, &sts_module);
+	const char *username = apr_table_get(r->subprocess_env,
+			STS_ROPC_USERNAME_ENV_VAR);
+	if (username != NULL)
+		return username;
 	if (cfg->ropc_username == NULL)
 		// return the client_id by default
 		return sts_ropc_get_client_id(r);

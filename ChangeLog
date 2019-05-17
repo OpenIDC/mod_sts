@@ -1,3 +1,7 @@
+05/17/2019
+- obtain ROPC username from environment variable STS_ROPC_USERNAME if set
+- version 0.9.7
+
 10/02/2018
 - various corrections related to packaging
 - version 0.9.6
