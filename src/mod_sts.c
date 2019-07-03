@@ -273,6 +273,7 @@ static int sts_check_access_handler(request_rec *r)
 	oauth2_apache_request_ctx_t *ctx = NULL;
 	char *source_token = NULL;
 	int rv = DECLINED;
+	oauth2_http_status_code_t status_code = 0;
 
 	cfg = ap_get_module_config(r->per_dir_config, &sts_module);
 	ctx = OAUTH2_APACHE_REQUEST_CTX(r, sts);
@@ -290,11 +291,15 @@ static int sts_check_access_handler(request_rec *r)
 
 	if (sts_request_handler(ctx->log, cfg, ctx->request, &source_token,
 				&oauth2_apache_server_callback_funcs,
-				ctx->r) == false) {
-		rv = oauth2_apache_return_www_authenticate(
+				ctx->r, &status_code) == false) {
+		if (status_code < 500) {
+			rv = oauth2_apache_return_www_authenticate(
 		    sts_accept_source_token_in_get(NULL, cfg), ctx,
-		    HTTP_UNAUTHORIZED, "invalid_token",
+			status_code >= 500 ? status_code : HTTP_UNAUTHORIZED, "invalid_token",
 		    "Token could not be swapped.");
+		} else {
+			rv = status_code;
+		}
 		goto end;
 	}
 
