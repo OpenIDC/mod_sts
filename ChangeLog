@@ -1,3 +1,7 @@
+07/17/2019
+- add r->user option to sts_handler by setting STSROPCUsername to "*"
+- version 3.0.2
+
 07/03/2019
 - return status code from STS call if > 500 (504 = gateway timeout)
 - bump liboauth2 dependency to 1.1.1

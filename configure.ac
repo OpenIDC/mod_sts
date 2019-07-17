@@ -1,4 +1,4 @@
-AC_INIT([mod_sts],[3.0.1],[hans.zandbelt@zmartzone.eu])
+AC_INIT([mod_sts],[3.0.2],[hans.zandbelt@zmartzone.eu])
 AC_CONFIG_HEADERS([src/config.h])
 
 AM_INIT_AUTOMAKE([foreign no-define subdir-objects])
