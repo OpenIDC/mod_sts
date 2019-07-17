@@ -289,14 +289,16 @@ static int sts_check_access_handler(request_rec *r)
 		goto end;
 	}
 
-	if (sts_request_handler(ctx->log, cfg, ctx->request, &source_token,
-				&oauth2_apache_server_callback_funcs,
-				ctx->r, &status_code) == false) {
+	if (sts_request_handler(ctx->log, cfg, ctx->request, r->user,
+				&source_token,
+				&oauth2_apache_server_callback_funcs, ctx->r,
+				&status_code) == false) {
 		if (status_code < 500) {
 			rv = oauth2_apache_return_www_authenticate(
-		    sts_accept_source_token_in_get(NULL, cfg), ctx,
-			status_code >= 500 ? status_code : HTTP_UNAUTHORIZED, "invalid_token",
-		    "Token could not be swapped.");
+			    sts_accept_source_token_in_get(NULL, cfg), ctx,
+			    status_code >= 500 ? status_code
+					       : HTTP_UNAUTHORIZED,
+			    "invalid_token", "Token could not be swapped.");
 		} else {
 			rv = status_code;
 		}
