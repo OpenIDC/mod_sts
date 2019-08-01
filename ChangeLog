@@ -1,3 +1,7 @@
+08/01/2019
+- fix STSAcceptSourceTokenIn "struct is null"
+- version 3.0.3
+
 07/17/2019
 - add r->user option to sts_handler by setting STSROPCUsername to "*"
 - version 3.0.2
