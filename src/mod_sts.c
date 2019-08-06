@@ -346,40 +346,6 @@ end:
 	return rv;
 }
 
-static int sts_fixup_handler(request_rec *r)
-{
-	int rc = DECLINED;
-
-	/*
-	oauth2_apache_request_context_t *ctx =
-oauth2_apache_request_context_get(r);
-
-	oauth2_debug(ctx->log, "enter: \"%s?%s\", ap_is_initial_req(r)=%d",
-		  r->parsed_uri.path, r->args, ap_is_initial_req(r));
-
-	if (ap_is_initial_req(r) == 0)
-		goto end;
-
-	char *source_token = NULL;
-
-	void *data = NULL;
-	apr_pool_userdata_get(&data, fixup_userdata_key, r->pool);
-
-	// TBD: do we need to only handle env var stuff; right now it also looks
-	// for
-	// tokens elsewhere
-	// TBD: always set target env var token in the fixup handler to be "more
-	// authoritative"?
-	if (data != NULL)
-		rc = sts_handler(ctx->log, ctx->request, r, &source_token);
-
-end:
-	oauth2_debug(ctx->log, "leave: %d", rc);
-	*/
-
-	return rc;
-}
-
 OAUTH2_APACHE_HANDLERS(sts)
 
 #define STS_CFG_FUNC_ARGS(nargs, member)                                       \
@@ -511,14 +477,13 @@ static const command_rec OAUTH2_APACHE_COMMANDS(sts)[] = {
 
 static void OAUTH2_APACHE_REGISTER_HOOKS(sts)(apr_pool_t *p)
 {
-	static const char *const aszPre[] = {"mod_auth_openidc.c", NULL};
+	static const char *const aszPre[] = {"mod_auth_openidc.c", "mod_oauth2", NULL};
 	ap_hook_post_config(OAUTH2_APACHE_POST_CONFIG(sts), NULL, NULL, APR_HOOK_MIDDLE);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	ap_hook_check_access(sts_check_access_handler, NULL, NULL, APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
+	ap_hook_fixups(sts_check_access_handler, aszPre, NULL, APR_HOOK_LAST);
 #else
-	ap_hook_access_checker(sts_check_access_handler, NULL, NULL, APR_HOOK_MIDDLE);
+	ap_hook_fixups(sts_check_access_handler, aszPre, NULL, APR_HOOK_LAST);
 #endif
-	ap_hook_fixups(sts_fixup_handler, aszPre, NULL, APR_HOOK_LAST);
 	/*
 	ap_hook_insert_filter(sts_filter_in_insert_filter, NULL, NULL,
 			      APR_HOOK_MIDDLE);

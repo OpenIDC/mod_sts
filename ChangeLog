@@ -1,3 +1,7 @@
+08/06/2019
+- use fixup hook instead of access hook to be backwards compatible and work with mod_auth_openidc
+- version 3.0.4
+
 08/01/2019
 - fix STSAcceptSourceTokenIn "struct is null"
 - version 3.0.3
