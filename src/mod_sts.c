@@ -477,7 +477,7 @@ static const command_rec OAUTH2_APACHE_COMMANDS(sts)[] = {
 
 static void OAUTH2_APACHE_REGISTER_HOOKS(sts)(apr_pool_t *p)
 {
-	static const char *const aszPre[] = {"mod_auth_openidc.c", "mod_oauth2", NULL};
+	static const char *const aszPre[] = {"mod_auth_openidc.c", "mod_oauth2.c", NULL};
 	ap_hook_post_config(OAUTH2_APACHE_POST_CONFIG(sts), NULL, NULL, APR_HOOK_MIDDLE);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	ap_hook_fixups(sts_check_access_handler, aszPre, NULL, APR_HOOK_LAST);
