@@ -321,17 +321,18 @@ static int sts_check_access_handler(request_rec *r)
 		oauth2_apache_request_header_set(
 		    ctx->log, ctx->r,
 		    sts_get_pass_target_token_in_hdr_name(cfg),
-		    oauth2_http_request_hdr_in_get(
+		    oauth2_http_request_header_get(
 			ctx->log, ctx->request,
 			sts_get_pass_target_token_in_hdr_name(cfg)));
 	if (sts_get_pass_target_token_in(cfg) & OAUTH2_CFG_TOKEN_IN_COOKIE)
 		oauth2_apache_request_header_set(
 		    ctx->log, ctx->r, OAUTH2_HTTP_HDR_COOKIE,
-		    oauth2_http_hdr_in_cookie_get(ctx->log, ctx->request));
+		    oauth2_http_request_header_cookie_get(ctx->log,
+							  ctx->request));
 	if (sts_get_pass_target_token_in(cfg) & OAUTH2_CFG_TOKEN_IN_BASIC)
 		oauth2_apache_request_header_set(
 		    ctx->log, ctx->r, OAUTH2_HTTP_HDR_AUTHORIZATION,
-		    oauth2_http_request_hdr_in_get(
+		    oauth2_http_request_header_get(
 			ctx->log, ctx->request, OAUTH2_HTTP_HDR_AUTHORIZATION));
 	// if (sts_get_pass_target_token_in(cfg->cfg) &
 	// OAUTH2_CFG_TOKEN_IN_QUERY)

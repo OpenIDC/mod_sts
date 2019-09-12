@@ -1,3 +1,7 @@
+09/12/2019
+- depend on liboauth2 1.2.0 with new request header API
+- bump to 3.1.0
+
 08/06/2019
 - use fixup hook instead of access hook to be backwards compatible and work with mod_auth_openidc
 - version 3.0.4
