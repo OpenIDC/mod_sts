@@ -57,8 +57,8 @@ XML/SOAP based OASIS standard, see:
 [https://en.wikipedia.org/wiki/WS-Trust](https://en.wikipedia.org/wiki/WS-Trust)
 
 ##### OAuth 2.0 Token Exchange
-REST/OAuth 2.0 based IETF standard, see:
-[https://www.ietf.org/id/draft-ietf-oauth-token-exchange](https://www.ietf.org/id/draft-ietf-oauth-token-exchange)
+REST/OAuth 2.0 based IETF standard RFC 8693, see:
+[https://tools.ietf.org/html/rfc8693](https://tools.ietf.org/html/rfc8693)
 
 ##### OAuth 2.0 Resource Owner Password Credentials (ROPC)
 Essentially a workaround for communicating with servers that don't support any of the two options above
