@@ -1,3 +1,7 @@
+02/05/2020
+- depend on liboauth2 1.2.2 with new ROPC capability
+- bump to 3.1.1
+
 09/12/2019
 - depend on liboauth2 1.2.0 with new request header API
 - bump to 3.1.0

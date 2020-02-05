@@ -361,10 +361,7 @@ STS_CFG_FUNC_ARGS(2, wstrust_endpoint_auth)
 STS_CFG_FUNC_ARGS(1, wstrust_applies_to)
 STS_CFG_FUNC_ARGS(1, wstrust_token_type)
 STS_CFG_FUNC_ARGS(1, wstrust_value_type)
-STS_CFG_FUNC_ARGS(1, ropc_endpoint)
-STS_CFG_FUNC_ARGS(2, ropc_endpoint_auth)
-STS_CFG_FUNC_ARGS(1, ropc_client_id)
-STS_CFG_FUNC_ARGS(1, ropc_username)
+STS_CFG_FUNC_ARGS(1, ropc)
 STS_CFG_FUNC_ARGS(1, otx_endpoint)
 STS_CFG_FUNC_ARGS(2, otx_endpoint_auth)
 STS_CFG_FUNC_ARGS(1, otx_client_id)
@@ -424,22 +421,9 @@ static const command_rec OAUTH2_APACHE_COMMANDS(sts)[] = {
 		"Set the WS-Trust Value Type"),
 
 	STS_CFG_CMD_ARGS(1,
-		STSROPCEndpoint,
-		ropc_endpoint,
-		"Set the OAuth 2.0 ROPC Token endpoint"),
-	STS_CFG_CMD_ARGS(12,
-		STSROPCEndpointAuth,
-		ropc_endpoint_auth,
-		"Configure how this module authenticates to the ROPC endpoint"),
-	STS_CFG_CMD_ARGS(1,
-		STSROPCClientID,
-		ropc_client_id,
-		"Set the Client ID for the OAuth 2.0 ROPC token request"),
-	STS_CFG_CMD_ARGS(1,
-		STSROPCUsername,
-		ropc_username,
-		"Set the username to be used in the OAuth 2.0 ROPC token request; if left empty the client_id will be passed in the username parameter"),
-
+		STSROPC,
+		ropc,
+		"Set the OAuth 2.0 ROPC configuration"),
 	STS_CFG_CMD_ARGS(1,
 		STSOTXEndpoint,
 		otx_endpoint,
