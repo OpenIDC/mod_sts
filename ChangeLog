@@ -1,3 +1,8 @@
+11/07/2020
+- remove config.h
+- depend on liboauth2 >= 1.4.0
+- bump to 3.2.0-dev
+
 02/14/2020
 - depend on liboauth 1.2.4 with named cache
 

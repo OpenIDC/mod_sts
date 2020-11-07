@@ -13,9 +13,6 @@ includesubdir = $(includedir)/oauth2
 
 includesub_HEADERS = \
 	src/liboauth2-sts/include/oauth2/sts.h
-	
-nodist_includesub_HEADERS = \
-	src/config.h
 
 lib_LTLIBRARIES = @PACKAGE_NAME@.la
 
