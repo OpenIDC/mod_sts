@@ -368,7 +368,7 @@ static const command_rec OAUTH2_APACHE_COMMANDS(sts)[] = {
 		exchange,
 		"Configures the token exchange protocol and parameters."),
 
-	STS_CFG_CMD_ARGS(2,
+	STS_CFG_CMD_ARGS(12,
 		STSCache,
 		cache,
 		"Set the cache type and options"),
