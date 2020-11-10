@@ -343,21 +343,12 @@ OAUTH2_APACHE_HANDLERS(sts)
 #define STS_CFG_FUNC_ARGS(nargs, member)                                       \
 	OAUTH2_APACHE_CMD_ARGS##nargs(sts_cfg, member)
 
-STS_CFG_FUNC_ARGS(1, type)
-STS_CFG_FUNC_ARGS(1, ssl_validation)
-STS_CFG_FUNC_ARGS(1, http_timeout)
-STS_CFG_FUNC_ARGS(2, request_parameters)
-STS_CFG_FUNC_ARGS(1, wstrust_endpoint)
-STS_CFG_FUNC_ARGS(2, wstrust_endpoint_auth)
-STS_CFG_FUNC_ARGS(1, wstrust_applies_to)
-STS_CFG_FUNC_ARGS(1, wstrust_token_type)
-STS_CFG_FUNC_ARGS(1, wstrust_value_type)
-STS_CFG_FUNC_ARGS(1, ropc)
-STS_CFG_FUNC_ARGS(1, otx_endpoint)
-STS_CFG_FUNC_ARGS(2, otx_endpoint_auth)
-STS_CFG_FUNC_ARGS(1, otx_client_id)
+// const char *apache_sts_cfg_set_exchange() {
+//	return NULL;
+//}
+
+STS_CFG_FUNC_ARGS(23, exchange)
 STS_CFG_FUNC_ARGS(2, cache)
-STS_CFG_FUNC_ARGS(1, cache_expiry_s)
 STS_CFG_FUNC_ARGS(2, accept_source_token_in)
 STS_CFG_FUNC_ARGS(2, pass_target_token_in)
 
@@ -372,70 +363,15 @@ STS_CFG_FUNC_ARGS(2, pass_target_token_in)
 
 static const command_rec OAUTH2_APACHE_COMMANDS(sts)[] = {
 
-	STS_CFG_CMD_ARGS(1,
-		STSType,
-		type,
-		"Set STS type (or disable)"),
-	STS_CFG_CMD_ARGS(1,
-		STSSSLValidateServer,
-		ssl_validation,
-		"Enable or disable SSL server certificate validation for calls to the STS"),
-	STS_CFG_CMD_ARGS(1,
-		STSHTTPTimeOut,
-		http_timeout,
-		"Timeout for calls to the STS"),
-
-	STS_CFG_CMD_ARGS(12,
-		STSRequestParameter,
-		request_parameters,
-		"Set extra request parameters for the token exchange request"),
-
-	STS_CFG_CMD_ARGS(1,
-		STSWSTrustEndpoint,
-		wstrust_endpoint,
-		"Set the WS-Trust STS endpoint"),
-	STS_CFG_CMD_ARGS(12,
-		STSWSTrustEndpointAuth,
-		wstrust_endpoint_auth,
-		"Configure how this module authenticates to the WS-Trust endpoint"),
-	STS_CFG_CMD_ARGS(1,
-		STSWSTrustAppliesTo,
-		wstrust_applies_to,
-		"Set the WS-Trust AppliesTo value"),
-	STS_CFG_CMD_ARGS(1,
-		STSWSTrustTokenType,
-		wstrust_token_type,
-		"Set the WS-Trust Token Type"),
-	STS_CFG_CMD_ARGS(1,
-		STSWSTrustValueType,
-		wstrust_value_type,
-		"Set the WS-Trust Value Type"),
-
-	STS_CFG_CMD_ARGS(1,
-		STSROPC,
-		ropc,
-		"Set the OAuth 2.0 ROPC configuration"),
-	STS_CFG_CMD_ARGS(1,
-		STSOTXEndpoint,
-		otx_endpoint,
-		"Set the OAuth 2.0 Token Exchange endpoint"),
-	STS_CFG_CMD_ARGS(12,
-		STSOTXEndpointAuth,
-		otx_endpoint_auth,
-		"Configure how this module authenticates to the OAuth 2.0 Token Exchange endpoint"),
-	STS_CFG_CMD_ARGS(1,
-		STSOTXClientID,
-		otx_client_id,
-		"Set the Client ID for the OAuth 2.0 Token Exchange request"),
+	STS_CFG_CMD_ARGS(23,
+		STSExchange,
+		exchange,
+		"Configures the token exchange protocol and parameters."),
 
 	STS_CFG_CMD_ARGS(2,
 		STSCache,
 		cache,
 		"Set the cache type and options"),
-	STS_CFG_CMD_ARGS(1,
-		STSCacheExpiresIn,
-		cache_expiry_s,
-		"Set the cache expiry for access tokens in seconds"),
 
 	STS_CFG_CMD_ARGS(12,
 		STSAcceptSourceTokenIn,

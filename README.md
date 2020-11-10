@@ -74,13 +74,12 @@ WS-Trust STS using HTTP Basic authentication.
 LogLevel sts:debug
 
 <Location /sts/wstrust>	
-	STSType wstrust
-	STSWSTrustEndpoint https://pingfed:9031/pf/sts.wst
-	STSSSLValidateServer Off
-	STSWSTrustEndpointAuth basic username=wstrust&password=2Federate
-	STSWSTrustAppliesTo urn:pingfed
-	STSWSTrustValueType urn:pingidentity.com:oauth2:grant_type:validate_bearer
-	STSWSTrustTokenType urn:bogus:token
+	STSExchange wstrust https://pingfed:9031/pf/sts.wst \
+auth=basic&username=wstrust&password=2Federate&\
+applies_to=urn:pingfed&\
+value_type=urn:pingidentity.com:oauth2:grant_type:validate_bearer&\
+token_type=urn:bogus:token&\
+ssl_verify=false
 
 	ProxyPass http://echo:8080/headers
 	ProxyPassReverse http://echo:8080/headers
@@ -93,8 +92,12 @@ OAuth 2.0 Resource Owner Password Credentials based STS using `client_secret_bas
 LogLevel sts:debug
 
 <Location /sts/ropc>
-	STSType ropc
-	STSROPC url=https://pingfed:9031/as/token.oauth2&auth=client_secret_basic&client_id=sts0&client_secret=2Federate&username=dummy&ssl_verify=off;
+	STSExchange ropc https://pingfed:9031/as/token.oauth2 \
+auth=client_secret_basic&\
+client_id=sts0&\
+client_secret=2Federate&\
+username=dummy&\
+ssl_verify=false
 
 	ProxyPass http://echo:8080/headers
 	ProxyPassReverse http://echo:8080/headers	
@@ -108,10 +111,11 @@ OAuth 2.0 Token Exchange using `client_secret_basic` authentication.
 LogLevel sts:debug
 
 <Location /sts/otx>
-	STSType otx
-	STSOTXEndpoint https://keycloak:8443/auth/realms/master/protocol/openid-connect/token
-	STSSSLValidateServer Off
-	STSOTXEndpointAuth client_secret_basic client_id=otxclient&client_secret=2Federate
+	STSExchange otx https://keycloak:8443/auth/realms/master/protocol/openid-connect/token \
+auth=client_secret_basic&\
+client_id=otxclient&\
+client_secret=2Federate&\
+ssl_verify=false
 
 	ProxyPass http://echo:8080/headers
 	ProxyPassReverse http://echo:8080/headers
