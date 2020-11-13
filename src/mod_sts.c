@@ -349,6 +349,7 @@ OAUTH2_APACHE_HANDLERS(sts)
 
 STS_CFG_FUNC_ARGS(23, exchange)
 STS_CFG_FUNC_ARGS(2, cache)
+STS_CFG_FUNC_ARGS(1, passphrase)
 STS_CFG_FUNC_ARGS(2, accept_source_token_in)
 STS_CFG_FUNC_ARGS(2, pass_target_token_in)
 
@@ -362,6 +363,11 @@ STS_CFG_FUNC_ARGS(2, pass_target_token_in)
 		desc)
 
 static const command_rec OAUTH2_APACHE_COMMANDS(sts)[] = {
+
+	STS_CFG_CMD_ARGS(1,
+			STSCryptoPassphrase,
+		passphrase,
+		"Set the crypto passphrase"),
 
 	STS_CFG_CMD_ARGS(23,
 		STSExchange,

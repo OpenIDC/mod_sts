@@ -1,4 +1,7 @@
-11/20/2020
+11/13/2020
+- add STSCryptoPassphrase
+
+11/10/2020
 - use refactored liboauth2-sts
 
 11/07/2020
