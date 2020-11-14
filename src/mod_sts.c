@@ -37,227 +37,6 @@
 
 OAUTH2_APACHE_LOG(sts)
 
-/*
-static int sts_config_merged_vhost_configs_exist(server_rec *s)
-{
-	sts_server_config *cfg = NULL;
-	int rc = FALSE;
-	while (s != NULL) {
-		cfg = ap_get_module_config(s->module_config, &sts_module);
-		if (cfg->merged) {
-			rc = TRUE;
-			break;
-		}
-		s = s->next;
-	}
-	return rc;
-}
-
-int sts_config_check_vhost_config(oauth2_log_t *log, apr_pool_t *pool,
-				  server_rec *s)
-{
-	sts_server_config *cfg =
-	    ap_get_module_config(s->module_config, &sts_module);
-	int rc = OK;
-	int mode = (cfg->mode == STS_CONFIG_POS_INT_UNSET)
-		       ? STS_CONFIG_DEFAULT_STS_MODE
-		       : cfg->mode;
-	switch (mode) {
-	case STS_CONFIG_MODE_WSTRUST:
-		rc = sts_wstrust_config_check_vhost(cfg->log, pool, s, cfg);
-		break;
-	case STS_CONFIG_MODE_ROPC:
-		rc = sts_ropc_config_check_vhost(cfg->log, pool, s, cfg);
-		break;
-	case STS_CONFIG_MODE_OTX:
-		rc = sts_otx_config_check_vhost(cfg->log, pool, s, cfg);
-		break;
-	default:
-		oauth2_error(log, "STS mode is set to unsupported value: %d",
-			  mode);
-		rc = HTTP_INTERNAL_SERVER_ERROR;
-		break;
-	}
-	return rc;
-}
-
-static int sts_config_check_merged_vhost_configs(oauth2_log_t *log,
-						 apr_pool_t *pool,
-						 server_rec *s)
-{
-	sts_server_config *cfg = NULL;
-	int rc = OK;
-	while (s != NULL) {
-		cfg = ap_get_module_config(s->module_config, &sts_module);
-		if (cfg->merged) {
-			rc = sts_config_check_vhost_config(log, pool, s);
-			if (rc != OK) {
-				break;
-			}
-		}
-		s = s->next;
-	}
-	return rc;
-}
-*/
-
-/*
- * Apache has a base vhost that true vhosts derive from.
- * There are two startup scenarios:
- *
- * 1. Only the base vhost contains STS settings.
- *    No server configs have been merged.
- *    Only the base vhost needs to be checked.
- *
- * 2. The base vhost contains zero or more STS settings.
- *    One or more vhosts override these.
- *    These vhosts have a merged config.
- *    All merged configs need to be checked.
- */
-
-/*
-if (!sts_config_merged_vhost_configs_exist(s)) {
-	return sts_config_check_vhost_config(cfg->log, pool, s);
-}
-return sts_config_check_merged_vhost_configs(cfg->log, pool, s);
-*/
-
-/*
-#define STS_USERDATA_POST_PARAMS_KEY "sts_userdata_post_params"
-
-static bool sts_userdata_set_post_param(oauth2_log_t *log, request_rec *r,
-					const char *post_param_name,
-					const char *post_param_value)
-{
-
-	char *userdata_post_params = NULL;
-	oauth2_nv_list_t *list = oauth2_nv_list_init(log);
-	oauth2_nv_list_add(log, list, post_param_name, post_param_value);
-	userdata_post_params = oauth2_http_url_form_encode(log, list);
-	apr_pool_userdata_set(apr_pstrdup(r->pool, userdata_post_params),
-			      STS_USERDATA_POST_PARAMS_KEY, NULL, r->pool);
-	oauth2_mem_free(userdata_post_params);
-	return true;
-}
-
-bool oauth2_apache_http_read_post(oauth2_log_t *log, request_rec *r,
-			       oauth2_nv_list_t **list);
-
-static const char stsFilterName[] = "sts_filter_in_filter";
-
-static void sts_filter_in_insert_filter(request_rec *r)
-{
-
-	if (ap_is_initial_req(r) == 0)
-		return;
-
-	if (sts_get_enabled(r) != 1)
-		return;
-
-	char *userdata_post_params = NULL;
-	apr_pool_userdata_get((void **)&userdata_post_params,
-			      STS_USERDATA_POST_PARAMS_KEY, r->pool);
-	if (userdata_post_params == NULL)
-		return;
-
-	ap_add_input_filter(stsFilterName, NULL, r, r->connection);
-}
-
-typedef struct sts_filter_in_context {
-	apr_bucket_brigade *pbbTmp;
-	apr_size_t nbytes;
-} sts_filter_in_context;
-
-static apr_status_t sts_filter_in_filter(ap_filter_t *f,
-					 apr_bucket_brigade *brigade,
-					 ap_input_mode_t mode,
-					 apr_read_type_e block,
-					 apr_off_t nbytes)
-{
-	sts_filter_in_context *ctx = NULL;
-	apr_bucket *b_in = NULL, *b_out = NULL;
-	char *buf = NULL;
-	apr_status_t rc = APR_SUCCESS;
-	char *userdata_post_params = NULL;
-
-	oauth2_apache_request_context_t *actx =
-	    oauth2_apache_request_context_get(f->r);
-
-	apr_pool_userdata_get((void **)&userdata_post_params,
-			      STS_USERDATA_POST_PARAMS_KEY, f->r->pool);
-
-	if (!(ctx = f->ctx)) {
-		f->ctx = ctx = apr_palloc(f->r->pool, sizeof *ctx);
-		ctx->pbbTmp = apr_brigade_create(
-		    f->r->pool, f->r->connection->bucket_alloc);
-		ctx->nbytes = 0;
-	}
-
-	if (APR_BRIGADE_EMPTY(ctx->pbbTmp)) {
-		rc = ap_get_brigade(f->next, ctx->pbbTmp, mode, block, nbytes);
-
-		if (mode == AP_MODE_EATCRLF || rc != APR_SUCCESS)
-			return rc;
-	}
-
-	while (!APR_BRIGADE_EMPTY(ctx->pbbTmp)) {
-
-		b_in = APR_BRIGADE_FIRST(ctx->pbbTmp);
-
-		if (APR_BUCKET_IS_EOS(b_in)) {
-
-			APR_BUCKET_REMOVE(b_in);
-
-			// TODO: this relies on the precondition that one post
-			// parameter is
-			// already there...
-			if (ctx->nbytes > 0) {
-
-				// we wouldn't be filtering if there wasn't any
-				// data to add so
-				// userdata_post_params != NULL
-				buf = apr_psprintf(f->r->pool, "&%s",
-						   userdata_post_params);
-				b_out = apr_bucket_heap_create(
-				    buf, strlen(buf), 0,
-				    f->r->connection->bucket_alloc);
-
-				APR_BRIGADE_INSERT_TAIL(brigade, b_out);
-
-				oauth2_debug(actx->log,
-					  "## adding: %lu post data to "
-					  "existing length: %ld",
-					  strlen(buf), ctx->nbytes);
-
-				ctx->nbytes += strlen(buf);
-
-				if (oauth2_http_hdr_in_content_length_get(
-					actx->log, actx->request) != NULL)
-					oauth2_http_hdr_in_content_length_set(
-					    actx->log, actx->request,
-					    ctx->nbytes);
-
-				// we can have multiple APR_BUCKET_IS_EOS coming
-				// in
-				// so make sure we add our target token only
-				// once
-				ctx->nbytes = 0;
-			}
-
-			APR_BRIGADE_INSERT_TAIL(brigade, b_in);
-
-			break;
-		}
-
-		APR_BUCKET_REMOVE(b_in);
-		APR_BRIGADE_INSERT_TAIL(brigade, b_in);
-		ctx->nbytes += b_in->length;
-	}
-
-	return rc;
-}
-*/
-
 static int sts_check_access_handler(request_rec *r)
 {
 	oauth2_sts_cfg_t *cfg = NULL;
@@ -340,54 +119,45 @@ end:
 
 OAUTH2_APACHE_HANDLERS(sts)
 
-#define STS_CFG_FUNC_ARGS(nargs, member)                                       \
-	OAUTH2_APACHE_CMD_ARGS##nargs(sts_cfg, member)
-
-// const char *apache_sts_cfg_set_exchange() {
-//	return NULL;
-//}
-
-STS_CFG_FUNC_ARGS(23, exchange)
-STS_CFG_FUNC_ARGS(2, cache)
-STS_CFG_FUNC_ARGS(1, passphrase)
-STS_CFG_FUNC_ARGS(2, accept_source_token_in)
-STS_CFG_FUNC_ARGS(2, pass_target_token_in)
+OAUTH2_APACHE_CMD_ARGS1(sts, oauth2_sts_cfg_t, passphrase,
+			oauth2_crypto_passphrase_set, NULL)
+OAUTH2_APACHE_CMD_ARGS2(sts, oauth2_sts_cfg_t, cache, oauth2_cfg_set_cache,
+			NULL)
+OAUTH2_APACHE_CMD_ARGS2(sts, oauth2_sts_cfg_t, accept_source_token_in,
+			sts_cfg_set_accept_source_token_in, cfg)
+OAUTH2_APACHE_CMD_ARGS2(sts, oauth2_sts_cfg_t, pass_target_token_in,
+			sts_cfg_set_pass_target_token_in, cfg)
+OAUTH2_APACHE_CMD_ARGS3(sts, oauth2_sts_cfg_t, exchange, sts_cfg_set_exchange,
+			cfg)
 
 // clang-format off
-#define STS_CFG_CMD_ARGS(nargs, cmd, member, desc) \
-	AP_INIT_TAKE##nargs( \
-		cmd, \
-		apache_sts_cfg_set_##member, \
-		NULL, \
-		RSRC_CONF | ACCESS_CONF | OR_AUTHCFG, \
-		desc)
 
 static const command_rec OAUTH2_APACHE_COMMANDS(sts)[] = {
 
-	STS_CFG_CMD_ARGS(1,
-			STSCryptoPassphrase,
+	OAUTH2_APACHE_CMD_ARGS(sts, 1,
+		STSCryptoPassphrase,
 		passphrase,
 		"Set the crypto passphrase"),
 
-	STS_CFG_CMD_ARGS(23,
-		STSExchange,
-		exchange,
-		"Configures the token exchange protocol and parameters."),
-
-	STS_CFG_CMD_ARGS(12,
+	OAUTH2_APACHE_CMD_ARGS(sts, 12,
 		STSCache,
 		cache,
 		"Set the cache type and options"),
 
-	STS_CFG_CMD_ARGS(12,
+	OAUTH2_APACHE_CMD_ARGS(sts, 12,
 		STSAcceptSourceTokenIn,
 		accept_source_token_in,
 		"Configures in which format tokens can be presented."),
 
-	STS_CFG_CMD_ARGS(12,
+	OAUTH2_APACHE_CMD_ARGS(sts, 12,
 		STSPassTargetTokenIn,
 		pass_target_token_in,
 		"Configures in which way the target token is passed to the application."),
+
+	OAUTH2_APACHE_CMD_ARGS(sts, 23,
+		STSExchange,
+		exchange,
+		"Configures the token exchange protocol and parameters."),
 
 	{ NULL }
 
