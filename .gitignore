@@ -17,3 +17,6 @@
 /mod_sts.la
 /test-driver
 /.settings
+/config.guess~
+/config.sub~
+/configure~
