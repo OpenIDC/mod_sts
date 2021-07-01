@@ -16,7 +16,7 @@ includesub_HEADERS = \
 
 lib_LTLIBRARIES = @PACKAGE_NAME@.la
 
-@PACKAGE_NAME@_la_CFLAGS = @OAUTH2_CFLAGS@ @OAUTH2_APACHE_CFLAGS@ @APR_CFLAGS@ @XML_CFLAGS@ -Isrc/liboauth2-sts/include
+@PACKAGE_NAME@_la_CFLAGS = @OAUTH2_CFLAGS@ @OAUTH2_APACHE_CFLAGS@ @APACHE_CFLAGS@ @XML_CFLAGS@ -Isrc/liboauth2-sts/include
 @PACKAGE_NAME@_la_LIBADD = @OAUTH2_LIBS@ @OAUTH2_APACHE_LIBS@ @APR_LIBS@ @XML_LIBS@
 @PACKAGE_NAME@_la_SOURCES = \
 	src/liboauth2-sts/src/sts_int.h \
@@ -33,4 +33,4 @@ clang-format:
 	clang-format -style=file -i `find . -name *.[ch]`
 
 install:
-	@APXS2@ @APXS2_OPTS@ -i -n @PACKAGE_NAME@ @PACKAGE_NAME@.la
+	@APXS@ @APXS_OPTS@ -i -n @PACKAGE_NAME@ @PACKAGE_NAME@.la
