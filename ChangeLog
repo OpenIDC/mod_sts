@@ -1,3 +1,6 @@
+07/02/2021
+- add option to not return an error on token missing/exchange failure
+
 07/01/2021
 - change configure.ac to find Apache flags correctly
 

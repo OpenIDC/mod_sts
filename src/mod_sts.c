@@ -63,7 +63,7 @@ static int sts_check_access_handler(request_rec *r)
 				&source_token,
 				&oauth2_apache_server_callback_funcs, ctx->r,
 				&status_code) == false) {
-		if (status_code < 500) {
+		if ((status_code >= 400) && (status_code < 500)) {
 			rv = oauth2_apache_return_www_authenticate(
 			    sts_accept_source_token_in_get(NULL, cfg), ctx,
 			    status_code >= 500 ? status_code
