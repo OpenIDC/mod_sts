@@ -1,3 +1,5 @@
+[![Build Status](https://github.com/zmartzone/mod_sts/actions/workflows/build.yml/badge.svg)](https://github.com/zmartzone/mod_sts/actions/workflows/build.yml)
+
 # mod_sts
 A security token exchange module for Apache HTTP Server 2.x which allows for exchanging arbitrary security
 tokens by calling into a remote Security Token Service (STS).
@@ -26,8 +28,8 @@ and you don't want to enforce support for that legacy onto your external clients
 An source (or: incoming) token can be presented in a header (e.g. an `Authorization: bearer` header for
 OAuth 2.0 bearer access tokens), a query parameter or a cookie. Alternatively the token can be consumed
 from an environment variable set by a another Apache (authentication) module such as a validated access
-token set by [mod_auth_openidc](https://github.com/zmartzone/mod_auth_openidc) in OAuth 2.0 Resource
-Server mode.
+token set by [mod_oauth2](https://github.com/zmartzone/mod_oauth2) operating as an OAuth 2.0 Resource
+Server.
 
 Sample supported - incoming/external - source tokens:
 - an OAuth 2.0 bearer access token presented by an external OAuth 2.0 Client
@@ -135,11 +137,11 @@ Any questions/issues should go to issues tracker.
 #### Commercial Services
 For commercial Support contracts, Professional Services, Training and use-case specific support you can
 contact:  
-  [sales@zmartzone.eu](mailto:sales@zmartzone.eu)  
+  [sales@openidc.com](mailto:sales@openidc.com)
 
 
 Disclaimer
 ----------
-*This software is open sourced by ZmartZone IAM. For commercial support
-you can contact [ZmartZone IAM](https://www.zmartzone.eu) as described above in the [Support](#support)
+*This software is open sourced by OpenIDC. For commercial support
+you can contact [OpenIDC](https://www.openidc.com) as described above in the [Support](#support)
 section.*
