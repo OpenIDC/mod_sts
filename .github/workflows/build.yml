@@ -21,7 +21,7 @@ jobs:
         sudo apt-get install -y libssl-dev libcurl4-openssl-dev libhiredis-dev libmemcached-dev
         sudo apt-get install -y libjansson-dev libcjose-dev apache2-dev libxml2-dev check pkg-config
         cd /tmp
-        git clone https://github.com/zmartzone/liboauth2.git
+        git clone https://github.com/OpenIDC/liboauth2.git
         cd liboauth2
         ./autogen.sh
         ./configure

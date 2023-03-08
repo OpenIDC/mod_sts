@@ -1,4 +1,4 @@
-[![Build Status](https://github.com/zmartzone/mod_sts/actions/workflows/build.yml/badge.svg)](https://github.com/zmartzone/mod_sts/actions/workflows/build.yml)
+[![Build Status](https://github.com/OpenIDC/mod_sts/actions/workflows/build.yml/badge.svg)](https://github.com/OpenIDC/mod_sts/actions/workflows/build.yml)
 
 # mod_sts
 A security token exchange module for Apache HTTP Server 2.x which allows for exchanging arbitrary security
@@ -28,7 +28,7 @@ and you don't want to enforce support for that legacy onto your external clients
 An source (or: incoming) token can be presented in a header (e.g. an `Authorization: bearer` header for
 OAuth 2.0 bearer access tokens), a query parameter or a cookie. Alternatively the token can be consumed
 from an environment variable set by a another Apache (authentication) module such as a validated access
-token set by [mod_oauth2](https://github.com/zmartzone/mod_oauth2) operating as an OAuth 2.0 Resource
+token set by [mod_oauth2](https://github.com/OpenIDC/mod_oauth2) operating as an OAuth 2.0 Resource
 Server.
 
 Sample supported - incoming/external - source tokens:
@@ -131,7 +131,7 @@ directory.
 
 #### Community Support
 For generic questions, see the Wiki pages with Frequently Asked Questions at:  
-  [https://github.com/zmartzone/mod_sts/wiki](https://github.com/zmartzone/mod_sts/wiki)  
+  [https://github.com/OpenIDC/mod_sts/wiki](https://github.com/OpenIDC/mod_sts/wiki)  
 Any questions/issues should go to issues tracker.
 
 #### Commercial Services
