@@ -68,6 +68,11 @@ but can be configured/programmed to validate a token presented in the `password`
 OAuth 2.0 Resource Owner Password Credentials grant and return a target token in the `access token`
 claim of the token response.
 
+##### OAuth 2.0 Client Credentials (CC)
+This leverages the [OAuth 2.0 Client Credentials](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4) grant type
+but does not actually require a source token. Instead the configured client credentials are used as a bootstrapping
+mechanism to obtain an OAuth 2.0 access token that can be used to authenticate the service towards the backend.
+
 ## Quickstart
 
 WS-Trust STS using HTTP Basic authentication.
@@ -83,8 +88,8 @@ value_type=urn:pingidentity.com:oauth2:grant_type:validate_bearer&\
 token_type=urn:bogus:token&\
 ssl_verify=false
 
-	ProxyPass http://echo:8080/headers
-	ProxyPassReverse http://echo:8080/headers
+	ProxyPass http://echo:8080
+	ProxyPassReverse http://echo:8080
 </Location>
 ```
 
@@ -101,8 +106,28 @@ client_secret=2Federate&\
 username=dummy&\
 ssl_verify=false
 
-	ProxyPass http://echo:8080/headers
-	ProxyPassReverse http://echo:8080/headers	
+	ProxyPass http://echo:8080
+	ProxyPassReverse http://echo:8080
+</Location>
+```
+
+OAuth 2.0 Client Credentials token retrieval using `client_secret_basic` authentication.
+
+```apache
+LogLevel sts:debug
+
+<Location /sts/cc>
+	SetEnvIfExpr true dummy=dummy
+	STSAcceptSourceTokenIn environment name=dummy
+	STSPassTargetTokenIn header
+	STSExchange cc https://keycloak:8443/realms/master/protocol/openid-connect/token \
+auth=client_secret_basic&\
+client_id=cc_client&\
+client_secret=mysecret&\
+ssl_verify=false
+
+	ProxyPass http://echo:8080
+	ProxyPassReverse http://echo:8080
 </Location>
 ```
 
@@ -119,8 +144,8 @@ client_id=otxclient&\
 client_secret=2Federate&\
 ssl_verify=false
 
-	ProxyPass http://echo:8080/headers
-	ProxyPassReverse http://echo:8080/headers
+	ProxyPass http://echo:8080
+	ProxyPassReverse http://echo:8080
 </Location>
 ```
 

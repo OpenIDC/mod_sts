@@ -1,3 +1,8 @@
+12/06/2023
+- add support for the client credentials grant type
+- depend on liboauth >= 1.6.0
+- release 3.4.0
+
 03/08/2023
 - move repo to OpenIDC github organization
 
