@@ -34,10 +34,10 @@
 							<tool id="org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc.548331172" name="GCC C Compiler" superClass="org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.include.paths.811285626" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/liboauth2/include}&quot;"/>
+									<listOptionValue builtIn="false" value="/opt/homebrew/Cellar/apr/1.7.4/include/apr-1"/>
+									<listOptionValue builtIn="false" value="/opt/homebrew/Cellar/apr-util/1.6.3_1/include/apr-1"/>
+									<listOptionValue builtIn="false" value="/opt/homebrew/include/httpd/"/>
 									<listOptionValue builtIn="false" value="/usr/local/include"/>
-									<listOptionValue builtIn="false" value="/opt/local/include"/>
-									<listOptionValue builtIn="false" value="/Users/hzandbelt/projects/nginx/src/core"/>
-									<listOptionValue builtIn="false" value="/Users/hzandbelt/projects/nginx/src/http"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.preprocessor.def.symbols.2047978831" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="HAVE_LIBHIREDIS=1"/>
@@ -88,9 +88,11 @@
 							<tool id="org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.autogen.debug.831501834" name="autogen.sh" superClass="org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.autogen.debug"/>
 							<tool id="org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc.debug.397973033" name="GCC C Compiler" superClass="org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc.debug">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.include.paths.300127578" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-									<listOptionValue builtIn="false" value="/Users/hzandbelt/projects/nginx-1.15.5/src/core"/>
-									<listOptionValue builtIn="false" value="/Users/hzandbelt/projects/nginx-1.15.5/src/http"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/liboauth2/include}&quot;"/>
+									<listOptionValue builtIn="false" value="/opt/homebrew/Cellar/apr/1.7.4/include/apr-1"/>
+									<listOptionValue builtIn="false" value="/opt/homebrew/Cellar/apr-util/1.6.3_1/include/apr-1/"/>
+									<listOptionValue builtIn="false" value="/opt/homebrew/include/httpd/"/>
+									<listOptionValue builtIn="false" value="/usr/local/include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.preprocessor.def.symbols.854310462" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="HAVE_LIBHIREDIS=1"/>
