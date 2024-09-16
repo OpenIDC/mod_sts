@@ -126,8 +126,8 @@ OAUTH2_APACHE_CMD_ARGS2(sts, oauth2_sts_cfg_t, accept_source_token_in,
 			sts_cfg_set_accept_source_token_in, cfg)
 OAUTH2_APACHE_CMD_ARGS2(sts, oauth2_sts_cfg_t, pass_target_token_in,
 			sts_cfg_set_pass_target_token_in, cfg)
-OAUTH2_APACHE_CMD_ARGS3(sts, oauth2_sts_cfg_t, exchange, sts_cfg_set_exchange,
-			cfg)
+OAUTH2_APACHE_CMD_ARGSV4(sts, oauth2_sts_cfg_t, exchange, sts_cfg_set_exchange,
+			 cfg)
 
 // clang-format off
 
@@ -153,7 +153,7 @@ static const command_rec OAUTH2_APACHE_COMMANDS(sts)[] = {
 		pass_target_token_in,
 		"Configures in which way the target token is passed to the application."),
 
-	OAUTH2_APACHE_CMD_ARGS(sts, 23,
+	OAUTH2_APACHE_CMD_ARGS(sts, _ARGV,
 		STSExchange,
 		exchange,
 		"Configures the token exchange protocol and parameters."),

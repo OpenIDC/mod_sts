@@ -1,3 +1,8 @@
+09/16/2024
+- add JWT handler wih optional JQ filtering in liboauth2-sts 4.1.0dev
+- depend on liboauth2 >= 2.1.0
+- bump to 4.1.0dev
+
 08/22/2024
 - change LICENSE to Apache 2.0
 - depend on liboauth2 >= 2.0.0

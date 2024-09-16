@@ -78,8 +78,6 @@ mechanism to obtain an OAuth 2.0 access token that can be used to authenticate t
 WS-Trust STS using HTTP Basic authentication.
 
 ```apache
-LogLevel sts:debug
-
 <Location /sts/wstrust>	
 	STSExchange wstrust https://pingfed:9031/pf/sts.wst \
 auth=basic&username=wstrust&password=2Federate&\
@@ -87,17 +85,12 @@ applies_to=urn:pingfed&\
 value_type=urn:pingidentity.com:oauth2:grant_type:validate_bearer&\
 token_type=urn:bogus:token&\
 ssl_verify=false
-
-	ProxyPass http://echo:8080
-	ProxyPassReverse http://echo:8080
 </Location>
 ```
 
 OAuth 2.0 Resource Owner Password Credentials based STS using `client_secret_basic` authentication.
 
 ```apache
-LogLevel sts:debug
-
 <Location /sts/ropc>
 	STSExchange ropc https://pingfed:9031/as/token.oauth2 \
 auth=client_secret_basic&\
@@ -105,17 +98,12 @@ client_id=sts0&\
 client_secret=2Federate&\
 username=dummy&\
 ssl_verify=false
-
-	ProxyPass http://echo:8080
-	ProxyPassReverse http://echo:8080
 </Location>
 ```
 
 OAuth 2.0 Client Credentials token retrieval using `client_secret_basic` authentication.
 
 ```apache
-LogLevel sts:debug
-
 <Location /sts/cc>
 	SetEnvIfExpr true dummy=dummy
 	STSAcceptSourceTokenIn environment name=dummy
@@ -125,27 +113,32 @@ auth=client_secret_basic&\
 client_id=cc_client&\
 client_secret=mysecret&\
 ssl_verify=false
-
-	ProxyPass http://echo:8080
-	ProxyPassReverse http://echo:8080
 </Location>
 ```
 
 OAuth 2.0 Token Exchange using `client_secret_basic` authentication.
 
-
 ```apache
-LogLevel sts:debug
-
 <Location /sts/otx>
 	STSExchange otx https://keycloak:8443/auth/realms/master/protocol/openid-connect/token \
 auth=client_secret_basic&\
 client_id=otxclient&\
 client_secret=2Federate&\
 ssl_verify=false
+</Location>
+```
 
-	ProxyPass http://echo:8080
-	ProxyPassReverse http://echo:8080
+JWT generation from a incoming access token verified by mod_oauth2. The JSON payload is passed between the modules in an environment variable.
+
+```apache
+<Location /sts/jwk>
+	AuthType oauth2
+	Require valid-user
+	OAuth2TokenVerify introspect https://pingfed:9031/as/introspect.oauth2 introspect.ssl_verify=false&introspect.auth=client_secret_basic&client_id=rs0&client_secret=2Federate
+	OAuth2TargetPass json_payload_claim=payload&headers=false
+	STSAcceptSourceTokenIn environment name=OAUTH2_CLAIM_payload
+	STSExchange jwt "{\"kty\":\"RSA\",\"kid\":\"IbLjLR7-C1q0-ypkueZxGIJwBQNaLg46DZMpnPW1kps\",\"e\":\"AQAB\",\"n\":\"iGeTXbfV5bMppx7o7qMLCuVIKqbBa_qOzBiNNpe0K8rjg7-1z9GCuSlqbZtM0_5BQ6bGonnSPD--PowhFdivS4WNA33O0Kl1tQ0wdH3TOnwueIO9ahfW4q0BGFvMObneK-tjwiNMj1l-cZt8pvuS-3LtTWIzC-hTZM4caUmy5olm5PVdmru6C6V5rxkbYBPITFSzl5mpuo_C6RV_MYRwAh60ghs2OEvIWDrJkZnYaF7sjHC9j-4kfcM5oY7Zhg8KuHyloudYNzlqjVAPd0MbkLkh1pa8fmHsnN6cgfXYtFK7Z8WjYDUAhTH1JjZCVSFN55A-51dgD4cQNzieLEEkJw\",\"d\":\"Xc9d-kZERQVC0Dzh1b0sCwJE75Bf1fMr4hHAjJsovjV641ElqRdd4Borp9X2sJVcLTq1wWgmvmjYXgvhdTTg2f-vS4dqhPcGjM3VVUhzzPU6wIdZ7W0XzC1PY4E-ozTBJ1Nr-EhujuftnhRhVjYOkAAqU94FXVsaf2mBAKg-8WzrWx2MeWjfLcE79DmSL9Iw2areKVRGlKddIIPnHb-Mw9HB7ZCyVTC1v5sqhQPy6qPo8XHdQju_EYRlIOMksU8kcb20R_ezib_rHuVwJVlTNk6MvFUIj4ayXdX13Qy4kTBRiQM7pumPaypEE4CrAfTWP0AYnEwz_FGluOpMZNzoAQ\"}"
+	STSPassTargetTokenIn header
 </Location>
 ```
 
