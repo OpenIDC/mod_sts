@@ -1,3 +1,6 @@
+08/08/2025
+- release 4.1.0
+
 09/16/2024
 - add JWT handler wih optional JQ filtering in liboauth2-sts 4.1.0dev
 - depend on liboauth2 >= 2.1.0

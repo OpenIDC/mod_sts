@@ -1,4 +1,4 @@
-AC_INIT([mod_sts],[4.1.0dev],[hans.zandbelt@openidc.com])
+AC_INIT([mod_sts],[4.1.0],[hans.zandbelt@openidc.com])
 
 AM_INIT_AUTOMAKE([foreign no-define subdir-objects])
 AC_CONFIG_MACRO_DIRS([m4])
